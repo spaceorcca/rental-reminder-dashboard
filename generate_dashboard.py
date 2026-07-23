@@ -11,7 +11,7 @@ The generated page is published via GitHub Pages.
 
 Required environment variables:
     GOOGLE_SERVICE_ACCOUNT_JSON  - full contents of the service account JSON key
-    SPREADSHEET_ID               - ID of the Google Sheet from the URL
+    SHEET_NAME                   - name of the Google Sheet (default: "Rental Agreements")
 """
 
 import os
@@ -23,6 +23,7 @@ from urllib.parse import quote
 import gspread
 from google.oauth2.service_account import Credentials
 
+SHEET_NAME = os.environ.get("SHEET_NAME", "Rental Agreements")
 LOG_TAB_NAME = "Log"
 OUTPUT_DIR = "docs"
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "index.html")
@@ -34,11 +35,6 @@ def fail_fast_on_missing_env():
     if not GOOGLE_SERVICE_ACCOUNT_JSON:
         raise SystemExit(
             "Missing required environment variable: GOOGLE_SERVICE_ACCOUNT_JSON. "
-            "Set this as a GitHub Actions secret before running."
-        )
-    if "SPREADSHEET_ID" not in os.environ:
-        raise SystemExit(
-            "Missing required environment variable: SPREADSHEET_ID. "
             "Set this as a GitHub Actions secret before running."
         )
 
@@ -263,7 +259,9 @@ def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     client = get_sheet_client()
-    spreadsheet = client.open_by_key(os.environ["SPREADSHEET_ID"])
+    
+    # Opens sheet using default title 'Rental Agreements'
+    spreadsheet = client.open(SHEET_NAME)
     sheet = spreadsheet.sheet1
     log_ws = get_or_create_log_tab(spreadsheet)
 
