@@ -25,6 +25,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Generate dashboard
+        id: generate
         env:
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
@@ -37,3 +38,27 @@ jobs:
           git add docs/index.html
           git diff --quiet --cached || git commit -m "Update reminder dashboard $(date +'%Y-%m-%d')"
           git push
+
+      # Only runs if any previous step in this job failed.
+      # Sends a plain email via a free Gmail account + app password, so a
+      # broken pipeline never fails silently.
+      - name: Email me if this run failed
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.ALERT_GMAIL_ADDRESS }}
+          password: ${{ secrets.ALERT_GMAIL_APP_PASSWORD }}
+          subject: "⚠️ Rental Reminder Dashboard failed to build"
+          to: ${{ secrets.ALERT_GMAIL_ADDRESS }}
+          from: Rental Reminder Bot
+          body: |
+            The daily rental reminder dashboard workflow failed on ${{ github.repository }}.
+
+            Run details: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Nothing was sent to owners today until this is fixed — check the
+            Actions log above for the exact error (common causes: sheet name/ID
+            changed, sheet no longer shared with the service account, or a
+            secret was edited incorrectly).
