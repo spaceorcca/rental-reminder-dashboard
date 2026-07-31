@@ -7,6 +7,10 @@ static HTML dashboard with one-tap "Send WhatsApp" buttons using wa.me
 deep links. The actual send is always a manual tap by a human (you),
 so this never risks WhatsApp ban/automation detection.
 
+Owners with more than one property due on the same day are grouped into
+a single card with one button per property, so a repeat owner doesn't
+show up as several duplicate-looking rows.
+
 Also surfaces a real "upcoming renewals" table (next 60 days) so the
 page is never a blank screen even when nothing is due today, and shows
 a genuine last-successful-sync timestamp rather than a fabricated
@@ -23,6 +27,7 @@ Required environment variables:
 import os
 import json
 import html
+from collections import defaultdict
 from datetime import datetime, date
 from urllib.parse import quote
 
@@ -160,23 +165,42 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .stat.warn .value {{ color: var(--danger); }}
   .stat.ok .value {{ color: var(--accent); }}
 
-  h2 {{ font-size: 13px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.4px; margin: 26px 0 10px; }}
-
-  .due-row {{
-    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-    padding: 14px 16px; margin-bottom: 8px; display: flex; align-items: center;
-    justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  h2 {{
+    font-size: 13px; font-weight: 600; color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 0.4px; margin: 26px 0 10px; display: flex; justify-content: space-between; align-items: baseline;
   }}
-  .due-main {{ min-width: 0; }}
-  .due-top {{ display: flex; align-items: center; gap: 8px; margin-bottom: 3px; flex-wrap: wrap; }}
-  .owner {{ font-size: 14.5px; font-weight: 600; }}
-  .pill {{ font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 5px; text-transform: uppercase; letter-spacing: 0.2px; white-space: nowrap; }}
+  h2 .count {{ font-size: 11.5px; font-weight: 600; color: var(--text-dim); text-transform: none; letter-spacing: 0; }}
+
+  /* Owner group card — one per owner, holds 1+ property rows */
+  .owner-card {{
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; margin-bottom: 8px;
+  }}
+  .owner-head {{
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    margin-bottom: 4px; flex-wrap: wrap;
+  }}
+  .owner-name {{ font-size: 14.5px; font-weight: 600; }}
+  .owner-count {{ font-size: 11.5px; color: var(--text-dim); font-weight: 500; }}
+
+  .property-row {{
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 9px 0; border-top: 1px solid var(--border); flex-wrap: wrap;
+  }}
+  .owner-card .property-row:first-of-type {{ border-top: none; padding-top: 6px; }}
+  .property-main {{ min-width: 0; }}
+  .property-top {{ display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }}
+  .flat-name {{ font-size: 13.5px; font-weight: 600; }}
+  .pill {{
+    font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 5px;
+    text-transform: uppercase; letter-spacing: 0.2px; white-space: nowrap;
+  }}
   .pill.today {{ background: var(--danger-bg); color: var(--danger); }}
   .pill.soon {{ background: var(--amber-bg); color: var(--amber-text); }}
-  .sub {{ font-size: 12.5px; color: var(--text-dim); }}
+  .sub {{ font-size: 12px; color: var(--text-dim); margin-top: 1px; }}
   .send-btn {{
-    flex-shrink: 0; background: var(--accent); color: white; font-weight: 600; font-size: 13.5px;
-    text-decoration: none; padding: 9px 18px; border-radius: 8px;
+    flex-shrink: 0; background: var(--accent); color: white; font-weight: 600; font-size: 13px;
+    text-decoration: none; padding: 8px 16px; border-radius: 8px;
   }}
 
   table {{ width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }}
@@ -215,7 +239,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       </div>
     </div>
 
-    <h2>Action queue</h2>
+    <h2>Action queue <span class="count">{owner_group_count}</span></h2>
     {due_section}
 
     <h2>Upcoming renewals</h2>
@@ -233,17 +257,28 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </html>
 """
 
-DUE_ROW_TEMPLATE = """
-        <div class="due-row">
-          <div class="due-main">
-            <div class="due-top">
-              <span class="owner">{owner}</span>
-              <span class="pill {pill_class}">{pill_text}</span>
-            </div>
-            <div class="sub">{flat}{tenant_line} &middot; ends {end_date_display}</div>
+# One card per owner. Contains 1+ PROPERTY_ROW_TEMPLATE blocks inside it.
+OWNER_CARD_TEMPLATE = """
+        <div class="owner-card">
+          <div class="owner-head">
+            <span class="owner-name">{owner}</span>
+            <span class="owner-count">{property_count}</span>
           </div>
-          <a class="send-btn" href="{link}" target="_blank" rel="noopener">Send</a>
+          {property_rows}
         </div>
+"""
+
+PROPERTY_ROW_TEMPLATE = """
+          <div class="property-row">
+            <div class="property-main">
+              <div class="property-top">
+                <span class="flat-name">{flat}</span>
+                <span class="pill {pill_class}">{pill_text}</span>
+              </div>
+              <div class="sub">{tenant_line}ends {end_date_display}</div>
+            </div>
+            <a class="send-btn" href="{link}" target="_blank" rel="noopener">Send</a>
+          </div>
 """
 
 UPCOMING_TABLE_ROW_TEMPLATE = """
@@ -289,9 +324,12 @@ def main():
     cleaned_data = [{k.replace(":", "").strip(): v for k, v in row.items()} for row in data]
 
     today = date.today()
-    due_rows_html = []
+    # Group due properties by (owner name, phone) so the same person with
+    # multiple flats gets one card instead of duplicate owner-name rows.
+    due_by_owner = defaultdict(list)
     upcoming_rows = []
     total_count = 0
+    due_count = 0
 
     for row in cleaned_data:
         owner = str(row.get("Owner Name", "")).strip()
@@ -324,19 +362,23 @@ def main():
 
             pill_class = "today" if days_left == 0 else "soon"
             pill_text = "Ends today" if days_left == 0 else "30 days left"
-            tenant_line = f" &middot; {html.escape(tenant)}" if tenant else ""
+            tenant_line = f"Tenant: {html.escape(tenant)} &middot; " if tenant else ""
 
-            due_rows_html.append(
-                DUE_ROW_TEMPLATE.format(
-                    owner=html.escape(owner),
-                    flat=html.escape(flat),
-                    pill_class=pill_class,
-                    pill_text=pill_text,
-                    end_date_display=end_date_display,
-                    tenant_line=tenant_line,
-                    link=link,
-                )
+            property_row_html = PROPERTY_ROW_TEMPLATE.format(
+                flat=html.escape(flat),
+                pill_class=pill_class,
+                pill_text=pill_text,
+                tenant_line=tenant_line,
+                end_date_display=end_date_display,
+                link=link,
             )
+
+            # Group key: owner name + phone, so two different owners who
+            # happen to share a name (unlikely but possible) aren't merged.
+            group_key = (owner, phone)
+            due_by_owner[group_key].append(property_row_html)
+            due_count += 1
+
             log_row(log_ws, owner, phone, flat, "LISTED", f"days_left={days_left}")
 
         # --- Upcoming pipeline: any agreement ending in the next N days ---
@@ -355,16 +397,31 @@ def main():
                 }
             )
 
+    # Build owner group cards, largest property count first so the owner
+    # with the most to handle today is immediately visible up top.
+    owner_groups = sorted(due_by_owner.items(), key=lambda kv: -len(kv[1]))
+    owner_cards_html = []
+    for (owner, _phone), property_rows in owner_groups:
+        property_count_label = (
+            "1 property" if len(property_rows) == 1 else f"{len(property_rows)} properties"
+        )
+        owner_cards_html.append(
+            OWNER_CARD_TEMPLATE.format(
+                owner=html.escape(owner),
+                property_count=property_count_label,
+                property_rows="".join(property_rows),
+            )
+        )
+
     # Sort upcoming by soonest first, cap the preview list
     upcoming_rows.sort(key=lambda r: r["days_left"])
     upcoming_preview = upcoming_rows[:UPCOMING_PREVIEW_LIMIT]
 
     generated_date = today.strftime("%d %b %Y")
-    due_count = len(due_rows_html)
 
     due_section = (
-        "".join(due_rows_html)
-        if due_rows_html
+        "".join(owner_cards_html)
+        if owner_cards_html
         else '<div class="empty">Nothing due today.</div>'
     )
 
@@ -384,6 +441,11 @@ def main():
         )
 
     due_stat_class = "warn" if due_count else "ok"
+    owner_group_count = (
+        f"{len(owner_groups)} owner{'s' if len(owner_groups) != 1 else ''}"
+        if owner_groups
+        else ""
+    )
 
     final_html = HTML_TEMPLATE.format(
         generated_date=generated_date,
@@ -393,6 +455,7 @@ def main():
         due_stat_class=due_stat_class,
         upcoming_window=UPCOMING_WINDOW_DAYS,
         upcoming_count=len(upcoming_rows),
+        owner_group_count=owner_group_count,
         due_section=due_section,
         upcoming_section=upcoming_section,
     )
@@ -401,7 +464,7 @@ def main():
         f.write(final_html)
 
     print(
-        f"Dashboard generated: {due_count} due today, "
+        f"Dashboard generated: {due_count} due today across {len(owner_groups)} owner(s), "
         f"{len(upcoming_rows)} upcoming in next {UPCOMING_WINDOW_DAYS} days, "
         f"{total_count} total tracked."
     )
