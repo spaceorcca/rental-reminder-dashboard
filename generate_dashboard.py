@@ -7,11 +7,17 @@ static HTML dashboard with one-tap "Send WhatsApp" buttons using wa.me
 deep links. The actual send is always a manual tap by a human (you),
 so this never risks WhatsApp ban/automation detection.
 
+Also surfaces a real "upcoming renewals" table (next 60 days) so the
+page is never a blank screen even when nothing is due today, and shows
+a genuine last-successful-sync timestamp rather than a fabricated
+uptime statistic.
+
 The generated page is published via GitHub Pages.
 
 Required environment variables:
     GOOGLE_SERVICE_ACCOUNT_JSON  - full contents of the service account JSON key
-    SHEET_NAME                   - name of the Google Sheet (default: "Rental Agreements")
+    SPREADSHEET_ID               - the Google Sheet ID (the long string in its URL
+                                    between /d/ and /edit)
 """
 
 import os
@@ -23,18 +29,25 @@ from urllib.parse import quote
 import gspread
 from google.oauth2.service_account import Credentials
 
-SHEET_NAME = os.environ.get("SHEET_NAME", "Rental Agreements")
 LOG_TAB_NAME = "Log"
 OUTPUT_DIR = "docs"
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "index.html")
+UPCOMING_WINDOW_DAYS = 60
+UPCOMING_PREVIEW_LIMIT = 10
 
 GOOGLE_SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")
+SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID")
 
 
 def fail_fast_on_missing_env():
     if not GOOGLE_SERVICE_ACCOUNT_JSON:
         raise SystemExit(
             "Missing required environment variable: GOOGLE_SERVICE_ACCOUNT_JSON. "
+            "Set this as a GitHub Actions secret before running."
+        )
+    if not SPREADSHEET_ID:
+        raise SystemExit(
+            "Missing required environment variable: SPREADSHEET_ID. "
             "Set this as a GitHub Actions secret before running."
         )
 
@@ -66,6 +79,12 @@ def log_row(log_ws, owner, phone, flat, status, details):
 
 
 def normalize_phone(raw_phone):
+    """
+    Strips formatting and ensures an Indian country code prefix.
+    Assumes all numbers in the sheet are Indian mobiles. If you ever add a
+    non-Indian owner's number, type it with its country code already
+    included in the sheet (e.g. "44..." for UK) so this function leaves it alone.
+    """
     digits = "".join(ch for ch in str(raw_phone) if ch.isdigit())
     if len(digits) == 10:
         return f"91{digits}"
@@ -95,6 +114,11 @@ def wa_link(phone, message):
     return f"https://wa.me/{phone}?text={quote(message)}"
 
 
+# -------------------------------------------------------------------------
+# HTML template — clean, flat, editorial style. No blur/gradients/webfonts,
+# so it renders identically and legibly on any phone in any lighting.
+# -------------------------------------------------------------------------
+
 HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -103,155 +127,149 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <title>Rental Renewal Reminders — {generated_date}</title>
 <style>
   :root {{
-    --bg: #0f1115;
-    --card-bg: #171a21;
-    --accent: #25d366;
-    --accent-dim: #1da851;
-    --text: #e8eaed;
-    --text-dim: #9aa0a6;
-    --border: #2a2e37;
-    --urgent: #ff6b6b;
+    --bg: #fafaf9;
+    --surface: #ffffff;
+    --border: #e7e5e4;
+    --text: #1c1917;
+    --text-dim: #78716c;
+    --accent: #16a34a;
+    --danger: #dc2626;
+    --danger-bg: #fef2f2;
+    --amber-bg: #fffbeb;
+    --amber-text: #92400e;
   }}
-  * {{ box-sizing: border-box; }}
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{
-    margin: 0;
-    padding: 24px 16px 60px;
     background: var(--bg);
     color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 28px 18px 50px;
+    -webkit-font-smoothing: antialiased;
   }}
-  .header {{
-    max-width: 640px;
-    margin: 0 auto 24px;
+  .container {{ max-width: 620px; margin: 0 auto; }}
+
+  .top {{ display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; flex-wrap: wrap; gap: 6px; }}
+  .top h1 {{ font-size: 19px; font-weight: 600; letter-spacing: -0.2px; }}
+  .top .date {{ font-size: 12.5px; color: var(--text-dim); }}
+  .sync-line {{ font-size: 12px; color: var(--text-dim); margin-bottom: 22px; }}
+
+  .stats {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 24px; }}
+  .stat {{ background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }}
+  .stat .label {{ font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600; }}
+  .stat .value {{ font-size: 22px; font-weight: 700; margin-top: 3px; }}
+  .stat.warn .value {{ color: var(--danger); }}
+  .stat.ok .value {{ color: var(--accent); }}
+
+  h2 {{ font-size: 13px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.4px; margin: 26px 0 10px; }}
+
+  .due-row {{
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; margin-bottom: 8px; display: flex; align-items: center;
+    justify-content: space-between; gap: 12px; flex-wrap: wrap;
   }}
-  .header h1 {{
-    font-size: 1.4rem;
-    margin: 0 0 4px;
-  }}
-  .header p {{
-    color: var(--text-dim);
-    margin: 0;
-    font-size: 0.9rem;
-  }}
-  .container {{
-    max-width: 640px;
-    margin: 0 auto;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }}
-  .card {{
-    background: var(--card-bg);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 18px;
-  }}
-  .card-top {{
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 10px;
-    margin-bottom: 10px;
-  }}
-  .owner-name {{
-    font-size: 1.1rem;
-    font-weight: 600;
-    margin: 0;
-  }}
-  .flat-address {{
-    color: var(--text-dim);
-    font-size: 0.88rem;
-    margin: 2px 0 0;
-  }}
-  .badge {{
-    font-size: 0.72rem;
-    font-weight: 600;
-    padding: 4px 10px;
-    border-radius: 999px;
-    white-space: nowrap;
-  }}
-  .badge.due-today {{
-    background: rgba(255,107,107,0.15);
-    color: var(--urgent);
-  }}
-  .badge.due-30 {{
-    background: rgba(37,211,102,0.15);
-    color: var(--accent);
-  }}
-  .meta-row {{
-    font-size: 0.85rem;
-    color: var(--text-dim);
-    margin-bottom: 14px;
-  }}
+  .due-main {{ min-width: 0; }}
+  .due-top {{ display: flex; align-items: center; gap: 8px; margin-bottom: 3px; flex-wrap: wrap; }}
+  .owner {{ font-size: 14.5px; font-weight: 600; }}
+  .pill {{ font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 5px; text-transform: uppercase; letter-spacing: 0.2px; white-space: nowrap; }}
+  .pill.today {{ background: var(--danger-bg); color: var(--danger); }}
+  .pill.soon {{ background: var(--amber-bg); color: var(--amber-text); }}
+  .sub {{ font-size: 12.5px; color: var(--text-dim); }}
   .send-btn {{
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    background: var(--accent);
-    color: #06210f;
-    font-weight: 600;
-    font-size: 0.95rem;
-    text-decoration: none;
-    padding: 12px;
-    border-radius: 10px;
-    transition: background 0.15s ease;
+    flex-shrink: 0; background: var(--accent); color: white; font-weight: 600; font-size: 13.5px;
+    text-decoration: none; padding: 9px 18px; border-radius: 8px;
   }}
-  .send-btn:active {{
-    background: var(--accent-dim);
-  }}
-  .empty-state {{
-    max-width: 640px;
-    margin: 60px auto;
-    text-align: center;
-    color: var(--text-dim);
-  }}
-  .empty-state .big {{
-    font-size: 2.5rem;
-    margin-bottom: 10px;
-  }}
-  .footer-note {{
-    max-width: 640px;
-    margin: 30px auto 0;
-    text-align: center;
-    color: var(--text-dim);
-    font-size: 0.78rem;
-    line-height: 1.5;
-  }}
+
+  table {{ width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }}
+  th {{ text-align: left; font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.3px; font-weight: 600; padding: 10px 12px; border-bottom: 1px solid var(--border); }}
+  td {{ padding: 10px 12px; font-size: 13.5px; border-bottom: 1px solid var(--border); }}
+  tr:last-child td {{ border-bottom: none; }}
+  .muted {{ color: var(--text-dim); }}
+  .num {{ text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }}
+  th:last-child {{ text-align: right; }}
+
+  .empty {{ font-size: 13px; color: var(--text-dim); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }}
+
+  footer {{ margin-top: 26px; font-size: 11.5px; color: var(--text-dim); line-height: 1.6; }}
 </style>
 </head>
 <body>
-  <div class="header">
-    <h1>Rental Renewal Reminders</h1>
-    <p>Generated {generated_date} · {count} due today</p>
-  </div>
   <div class="container">
-    {cards}
-  </div>
-  {empty_state}
-  <div class="footer-note">
-    Tap "Send WhatsApp" to open a pre-filled message in your own WhatsApp account.
-    Nothing is sent automatically — you review and tap Send yourself.
+    <div class="top">
+      <h1>Rental renewal reminders</h1>
+      <span class="date">{generated_date}</span>
+    </div>
+    <div class="sync-line">Last sync: {last_sync_display}</div>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="label">Tracked</div>
+        <div class="value">{total_count}</div>
+      </div>
+      <div class="stat {due_stat_class}">
+        <div class="label">Due today</div>
+        <div class="value">{due_count}</div>
+      </div>
+      <div class="stat">
+        <div class="label">Next {upcoming_window} days</div>
+        <div class="value">{upcoming_count}</div>
+      </div>
+    </div>
+
+    <h2>Action queue</h2>
+    {due_section}
+
+    <h2>Upcoming renewals</h2>
+    <table>
+      <tr><th>Property</th><th>Owner</th><th>Ends</th><th>Days left</th></tr>
+      {upcoming_section}
+    </table>
+
+    <footer>
+      Tap "Send" to open a pre-filled WhatsApp message from your own number.
+      Nothing sends automatically — you review and tap Send yourself.
+    </footer>
   </div>
 </body>
 </html>
 """
 
-CARD_TEMPLATE = """
-    <div class="card">
-      <div class="card-top">
-        <div>
-          <p class="owner-name">{owner}</p>
-          <p class="flat-address">{flat}</p>
+DUE_ROW_TEMPLATE = """
+        <div class="due-row">
+          <div class="due-main">
+            <div class="due-top">
+              <span class="owner">{owner}</span>
+              <span class="pill {pill_class}">{pill_text}</span>
+            </div>
+            <div class="sub">{flat}{tenant_line} &middot; ends {end_date_display}</div>
+          </div>
+          <a class="send-btn" href="{link}" target="_blank" rel="noopener">Send</a>
         </div>
-        <span class="badge {badge_class}">{badge_text}</span>
-      </div>
-      <div class="meta-row">Ends {end_date_display}{tenant_line}</div>
-      <a class="send-btn" href="{link}" target="_blank" rel="noopener">
-        Send WhatsApp to {owner}
-      </a>
-    </div>
 """
+
+UPCOMING_TABLE_ROW_TEMPLATE = """
+      <tr>
+        <td>{flat}</td>
+        <td class="muted">{owner}</td>
+        <td class="muted">{end_date_display}</td>
+        <td class="num">{days_left}d</td>
+      </tr>
+"""
+
+
+def get_last_sync_display(log_ws):
+    """
+    Pulls the most recent timestamp already written to the Log tab, so the
+    'last sync' line reflects a real prior successful run rather than a
+    made-up figure. Falls back to 'first run' if the log is empty.
+    """
+    try:
+        records = log_ws.get_all_records()
+    except Exception:
+        return "first run"
+    if not records:
+        return "first run"
+    last_ts = str(records[-1].get("Timestamp", "")).strip()
+    return last_ts or "first run"
 
 
 def main():
@@ -259,17 +277,21 @@ def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     client = get_sheet_client()
-    
-    # Opens sheet using default title 'Rental Agreements'
-    spreadsheet = client.open(SHEET_NAME)
+    spreadsheet = client.open_by_key(SPREADSHEET_ID)
     sheet = spreadsheet.sheet1
     log_ws = get_or_create_log_tab(spreadsheet)
+
+    # Capture last sync time BEFORE this run appends any new rows, so it
+    # genuinely reflects the previous run rather than the one in progress.
+    last_sync_display = get_last_sync_display(log_ws)
 
     data = sheet.get_all_records()
     cleaned_data = [{k.replace(":", "").strip(): v for k, v in row.items()} for row in data]
 
     today = date.today()
-    cards_html = []
+    due_rows_html = []
+    upcoming_rows = []
+    total_count = 0
 
     for row in cleaned_data:
         owner = str(row.get("Owner Name", "")).strip()
@@ -288,59 +310,101 @@ def main():
             log_row(log_ws, owner, raw_phone, flat, "SKIPPED", f"Invalid date format: {end_date_str}")
             continue
 
+        # Only count real, parseable agreement rows toward "Tracked".
+        total_count += 1
+
         days_left = (end_date - today).days
-        if days_left not in (30, 0):
-            continue
+        end_date_display = end_date.strftime("%d %b %Y")
 
-        phone = normalize_phone(raw_phone)
-        end_date_display = end_date.strftime("%d-%b-%Y")
-        message = build_message(owner, flat, tenant, end_date_display)
-        link = wa_link(phone, message)
+        # --- Due today / 30-day reminder (unchanged trigger logic) ---
+        if days_left in (30, 0):
+            phone = normalize_phone(raw_phone)
+            message = build_message(owner, flat, tenant, end_date_display)
+            link = wa_link(phone, message)
 
-        badge_class = "due-today" if days_left == 0 else "due-30"
-        badge_text = "Ends today" if days_left == 0 else "30 days left"
-        tenant_line = f" · Tenant: {html.escape(tenant)}" if tenant else ""
+            pill_class = "today" if days_left == 0 else "soon"
+            pill_text = "Ends today" if days_left == 0 else "30 days left"
+            tenant_line = f" &middot; {html.escape(tenant)}" if tenant else ""
 
-        cards_html.append(
-            CARD_TEMPLATE.format(
-                owner=html.escape(owner),
-                flat=html.escape(flat),
-                badge_class=badge_class,
-                badge_text=badge_text,
-                end_date_display=end_date_display,
-                tenant_line=tenant_line,
-                link=link,
+            due_rows_html.append(
+                DUE_ROW_TEMPLATE.format(
+                    owner=html.escape(owner),
+                    flat=html.escape(flat),
+                    pill_class=pill_class,
+                    pill_text=pill_text,
+                    end_date_display=end_date_display,
+                    tenant_line=tenant_line,
+                    link=link,
+                )
             )
-        )
+            log_row(log_ws, owner, phone, flat, "LISTED", f"days_left={days_left}")
 
-        log_row(log_ws, owner, phone, flat, "LISTED", f"days_left={days_left}")
+        # --- Upcoming pipeline: any agreement ending in the next N days ---
+        # (Independent of the due-today/30-day trigger — this is purely
+        # informational so the dashboard is never a blank page.)
+        if 0 < days_left <= UPCOMING_WINDOW_DAYS:
+            upcoming_rows.append(
+                {
+                    "days_left": days_left,
+                    "html": UPCOMING_TABLE_ROW_TEMPLATE.format(
+                        flat=html.escape(flat),
+                        owner=html.escape(owner),
+                        end_date_display=end_date_display,
+                        days_left=days_left,
+                    ),
+                }
+            )
+
+    # Sort upcoming by soonest first, cap the preview list
+    upcoming_rows.sort(key=lambda r: r["days_left"])
+    upcoming_preview = upcoming_rows[:UPCOMING_PREVIEW_LIMIT]
 
     generated_date = today.strftime("%d %b %Y")
-    count = len(cards_html)
+    due_count = len(due_rows_html)
 
-    if cards_html:
-        cards_block = "".join(cards_html)
-        empty_state_block = ""
+    due_section = (
+        "".join(due_rows_html)
+        if due_rows_html
+        else '<div class="empty">Nothing due today.</div>'
+    )
+
+    if upcoming_preview:
+        upcoming_section = "".join(r["html"] for r in upcoming_preview)
+        if len(upcoming_rows) > UPCOMING_PREVIEW_LIMIT:
+            remaining = len(upcoming_rows) - UPCOMING_PREVIEW_LIMIT
+            upcoming_section += (
+                f'<tr><td colspan="4" class="muted">'
+                f'+ {remaining} more in the next {UPCOMING_WINDOW_DAYS} days '
+                f'(see your sheet for the full list)</td></tr>'
+            )
     else:
-        cards_block = ""
-        empty_state_block = (
-            '<div class="empty-state">'
-            '<div class="big">✅</div>'
-            '<p>No reminders due today. Nothing to send.</p>'
-            "</div>"
+        upcoming_section = (
+            f'<tr><td colspan="4" class="muted">'
+            f'No renewals in the next {UPCOMING_WINDOW_DAYS} days.</td></tr>'
         )
+
+    due_stat_class = "warn" if due_count else "ok"
 
     final_html = HTML_TEMPLATE.format(
         generated_date=generated_date,
-        count=count,
-        cards=cards_block,
-        empty_state=empty_state_block,
+        last_sync_display=html.escape(last_sync_display),
+        total_count=total_count,
+        due_count=due_count,
+        due_stat_class=due_stat_class,
+        upcoming_window=UPCOMING_WINDOW_DAYS,
+        upcoming_count=len(upcoming_rows),
+        due_section=due_section,
+        upcoming_section=upcoming_section,
     )
 
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         f.write(final_html)
 
-    print(f"Dashboard generated with {count} reminder(s) due today.")
+    print(
+        f"Dashboard generated: {due_count} due today, "
+        f"{len(upcoming_rows)} upcoming in next {UPCOMING_WINDOW_DAYS} days, "
+        f"{total_count} total tracked."
+    )
 
 
 if __name__ == "__main__":
