@@ -8,13 +8,18 @@ deep links. The actual send is always a manual tap by a human (you),
 so this never risks WhatsApp ban/automation detection.
 
 Owners with more than one property due on the same day are grouped into
-a single card with one button per property, so a repeat owner doesn't
-show up as several duplicate-looking rows.
+a single card with one property row per property, so a repeat owner
+doesn't show up as several duplicate-looking cards.
 
 Also surfaces a real "upcoming renewals" table (next 60 days) so the
 page is never a blank screen even when nothing is due today, and shows
 a genuine last-successful-sync timestamp rather than a fabricated
 uptime statistic.
+
+Design: dark, high-contrast theme. Responsive — single column on phones,
+a wide multi-column layout on laptop/desktop screens. No backdrop-filter
+blur and no external font CDN, so it renders identically and legibly on
+any device without depending on anything that can silently fail to load.
 
 The generated page is published via GitHub Pages.
 
@@ -120,8 +125,9 @@ def wa_link(phone, message):
 
 
 # -------------------------------------------------------------------------
-# HTML template — clean, flat, editorial style. No blur/gradients/webfonts,
-# so it renders identically and legibly on any phone in any lighting.
+# HTML template — dark, high-contrast, responsive. Flat surfaces (no blur)
+# for reliable legibility and rendering; system fonts only, no external
+# CDN dependency; multi-column on wide screens, single column on phones.
 # -------------------------------------------------------------------------
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -132,97 +138,139 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <title>Rental Renewal Reminders — {generated_date}</title>
 <style>
   :root {{
-    --bg: #fafaf9;
-    --surface: #ffffff;
-    --border: #e7e5e4;
-    --text: #1c1917;
-    --text-dim: #78716c;
-    --accent: #16a34a;
-    --danger: #dc2626;
-    --danger-bg: #fef2f2;
-    --amber-bg: #fffbeb;
-    --amber-text: #92400e;
+    --bg: #0a0e14;
+    --surface: #131824;
+    --surface-2: #1a2130;
+    --border: #262e3d;
+    --text: #edf0f5;
+    --text-dim: #8b96a8;
+    --accent: #22c55e;
+    --accent-soft: rgba(34, 197, 94, 0.14);
+    --primary: #6d8bff;
+    --danger: #f87171;
+    --danger-bg: rgba(248, 113, 113, 0.14);
+    --amber: #fbbf24;
+    --amber-bg: rgba(251, 191, 36, 0.14);
   }}
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{
     background: var(--bg);
     color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    padding: 28px 18px 50px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    padding: 28px 18px 60px;
     -webkit-font-smoothing: antialiased;
   }}
-  .container {{ max-width: 620px; margin: 0 auto; }}
+  .page {{ max-width: 1180px; margin: 0 auto; }}
 
-  .top {{ display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; flex-wrap: wrap; gap: 6px; }}
-  .top h1 {{ font-size: 19px; font-weight: 600; letter-spacing: -0.2px; }}
-  .top .date {{ font-size: 12.5px; color: var(--text-dim); }}
-  .sync-line {{ font-size: 12px; color: var(--text-dim); margin-bottom: 22px; }}
+  /* Header */
+  .top {{
+    display: flex; justify-content: space-between; align-items: flex-start;
+    margin-bottom: 4px; flex-wrap: wrap; gap: 10px;
+  }}
+  .brand {{ display: flex; align-items: center; gap: 12px; }}
+  .logo {{
+    width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 15px; color: #06101f;
+  }}
+  .top h1 {{ font-size: 20px; font-weight: 700; letter-spacing: -0.2px; }}
+  .top .date {{ font-size: 12.5px; color: var(--text-dim); margin-top: 1px; }}
+  .sync-badge {{
+    font-size: 11.5px; color: var(--accent); background: var(--accent-soft);
+    border: 1px solid rgba(34, 197, 94, 0.3); padding: 6px 12px; border-radius: 999px;
+    font-weight: 600; white-space: nowrap;
+  }}
 
-  .stats {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 24px; }}
-  .stat {{ background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }}
-  .stat .label {{ font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600; }}
-  .stat .value {{ font-size: 22px; font-weight: 700; margin-top: 3px; }}
+  /* KPI row */
+  .stats {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 22px 0 28px; }}
+  .stat {{ background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }}
+  .stat .label {{ font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }}
+  .stat .value {{ font-size: 26px; font-weight: 800; margin-top: 5px; }}
   .stat.warn .value {{ color: var(--danger); }}
   .stat.ok .value {{ color: var(--accent); }}
 
   h2 {{
-    font-size: 13px; font-weight: 600; color: var(--text-dim); text-transform: uppercase;
-    letter-spacing: 0.4px; margin: 26px 0 10px; display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 13px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 0.6px; margin: 30px 0 12px; display: flex; justify-content: space-between; align-items: baseline;
   }}
   h2 .count {{ font-size: 11.5px; font-weight: 600; color: var(--text-dim); text-transform: none; letter-spacing: 0; }}
 
-  /* Owner group card — one per owner, holds 1+ property rows */
+  /* Owner cards — responsive grid: 1 col mobile, 2 col tablet, 3 col wide desktop */
+  .owner-grid {{ display: grid; grid-template-columns: 1fr; gap: 12px; }}
   .owner-card {{
-    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-    padding: 14px 16px; margin-bottom: 8px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 18px; display: flex; flex-direction: column;
   }}
   .owner-head {{
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
-    margin-bottom: 4px; flex-wrap: wrap;
+    margin-bottom: 6px; flex-wrap: wrap;
   }}
-  .owner-name {{ font-size: 14.5px; font-weight: 600; }}
+  .owner-name {{ font-size: 15px; font-weight: 700; }}
   .owner-count {{ font-size: 11.5px; color: var(--text-dim); font-weight: 500; }}
 
   .property-row {{
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 9px 0; border-top: 1px solid var(--border); flex-wrap: wrap;
+    padding: 11px 0; border-top: 1px solid var(--border);
   }}
-  .owner-card .property-row:first-of-type {{ border-top: none; padding-top: 6px; }}
-  .property-main {{ min-width: 0; }}
+  .owner-card .property-row:first-of-type {{ border-top: none; padding-top: 8px; }}
+  .property-main {{ min-width: 0; flex: 1 1 auto; }}
   .property-top {{ display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }}
-  .flat-name {{ font-size: 13.5px; font-weight: 600; }}
+  .flat-name {{ font-size: 13.5px; font-weight: 600; line-height: 1.35; }}
   .pill {{
-    font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 5px;
-    text-transform: uppercase; letter-spacing: 0.2px; white-space: nowrap;
+    font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
+    text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; flex-shrink: 0;
   }}
   .pill.today {{ background: var(--danger-bg); color: var(--danger); }}
-  .pill.soon {{ background: var(--amber-bg); color: var(--amber-text); }}
-  .sub {{ font-size: 12px; color: var(--text-dim); margin-top: 1px; }}
+  .pill.soon {{ background: var(--amber-bg); color: var(--amber); }}
+  .sub {{ font-size: 12px; color: var(--text-dim); margin-top: 3px; }}
   .send-btn {{
-    flex-shrink: 0; background: var(--accent); color: white; font-weight: 600; font-size: 13px;
-    text-decoration: none; padding: 8px 16px; border-radius: 8px;
+    flex-shrink: 0; background: var(--accent); color: #06210f; font-weight: 700; font-size: 13px;
+    text-decoration: none; padding: 9px 18px; border-radius: 9px; white-space: nowrap;
+    align-self: center;
   }}
 
-  table {{ width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }}
-  th {{ text-align: left; font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.3px; font-weight: 600; padding: 10px 12px; border-bottom: 1px solid var(--border); }}
-  td {{ padding: 10px 12px; font-size: 13.5px; border-bottom: 1px solid var(--border); }}
+  /* Upcoming table */
+  .table-wrap {{ background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }}
+  table {{ width: 100%; border-collapse: collapse; }}
+  th {{
+    text-align: left; font-size: 11px; color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 0.4px; font-weight: 700; padding: 12px 16px; border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+  }}
+  td {{ padding: 12px 16px; font-size: 13.5px; border-bottom: 1px solid var(--border); }}
   tr:last-child td {{ border-bottom: none; }}
   .muted {{ color: var(--text-dim); }}
-  .num {{ text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }}
+  .num {{ text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--amber); }}
   th:last-child {{ text-align: right; }}
 
-  .empty {{ font-size: 13px; color: var(--text-dim); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }}
+  .empty {{ font-size: 13px; color: var(--text-dim); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }}
 
-  footer {{ margin-top: 26px; font-size: 11.5px; color: var(--text-dim); line-height: 1.6; }}
+  footer {{ margin-top: 32px; font-size: 11.5px; color: var(--text-dim); line-height: 1.6; }}
+
+  /* --- Responsive: laptop / desktop widen into multi-column --- */
+  @media (min-width: 700px) {{
+    .owner-grid {{ grid-template-columns: repeat(2, 1fr); }}
+  }}
+  @media (min-width: 1040px) {{
+    .page {{ padding: 0 12px; }}
+    .stats {{ grid-template-columns: repeat(3, minmax(0, 260px)); }}
+    .owner-grid {{ grid-template-columns: repeat(3, 1fr); }}
+  }}
 </style>
 </head>
 <body>
-  <div class="container">
+  <div class="page">
     <div class="top">
-      <h1>Rental renewal reminders</h1>
-      <span class="date">{generated_date}</span>
+      <div class="brand">
+        <div class="logo">RR</div>
+        <div>
+          <h1>Rental Renewal Reminders</h1>
+          <div class="date">{generated_date}</div>
+        </div>
+      </div>
+      <div class="sync-badge">● Last sync: {last_sync_display}</div>
     </div>
-    <div class="sync-line">Last sync: {last_sync_display}</div>
 
     <div class="stats">
       <div class="stat">
@@ -230,23 +278,25 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <div class="value">{total_count}</div>
       </div>
       <div class="stat {due_stat_class}">
-        <div class="label">Due today</div>
+        <div class="label">Due Today</div>
         <div class="value">{due_count}</div>
       </div>
       <div class="stat">
-        <div class="label">Next {upcoming_window} days</div>
+        <div class="label">Next {upcoming_window} Days</div>
         <div class="value">{upcoming_count}</div>
       </div>
     </div>
 
-    <h2>Action queue <span class="count">{owner_group_count}</span></h2>
+    <h2>Action Queue <span class="count">{owner_group_count}</span></h2>
     {due_section}
 
-    <h2>Upcoming renewals</h2>
-    <table>
-      <tr><th>Property</th><th>Owner</th><th>Ends</th><th>Days left</th></tr>
-      {upcoming_section}
-    </table>
+    <h2>Upcoming Renewals</h2>
+    <div class="table-wrap">
+      <table>
+        <tr><th>Property</th><th>Owner</th><th>Ends</th><th>Days Left</th></tr>
+        {upcoming_section}
+      </table>
+    </div>
 
     <footer>
       Tap "Send" to open a pre-filled WhatsApp message from your own number.
@@ -268,6 +318,9 @@ OWNER_CARD_TEMPLATE = """
         </div>
 """
 
+# flex-wrap is intentionally OFF on .property-row and .send-btn keeps
+# align-self:center + flex-shrink:0, so the button stays pinned to the
+# right even when the address text wraps to multiple lines.
 PROPERTY_ROW_TEMPLATE = """
           <div class="property-row">
             <div class="property-main">
@@ -282,19 +335,19 @@ PROPERTY_ROW_TEMPLATE = """
 """
 
 UPCOMING_TABLE_ROW_TEMPLATE = """
-      <tr>
-        <td>{flat}</td>
-        <td class="muted">{owner}</td>
-        <td class="muted">{end_date_display}</td>
-        <td class="num">{days_left}d</td>
-      </tr>
+        <tr>
+          <td>{flat}</td>
+          <td class="muted">{owner}</td>
+          <td class="muted">{end_date_display}</td>
+          <td class="num">{days_left}d</td>
+        </tr>
 """
 
 
 def get_last_sync_display(log_ws):
     """
     Pulls the most recent timestamp already written to the Log tab, so the
-    'last sync' line reflects a real prior successful run rather than a
+    'last sync' badge reflects a real prior successful run rather than a
     made-up figure. Falls back to 'first run' if the log is empty.
     """
     try:
@@ -325,7 +378,7 @@ def main():
 
     today = date.today()
     # Group due properties by (owner name, phone) so the same person with
-    # multiple flats gets one card instead of duplicate owner-name rows.
+    # multiple flats gets one card instead of duplicate owner-name cards.
     due_by_owner = defaultdict(list)
     upcoming_rows = []
     total_count = 0
@@ -420,7 +473,7 @@ def main():
     generated_date = today.strftime("%d %b %Y")
 
     due_section = (
-        "".join(owner_cards_html)
+        f'<div class="owner-grid">{"".join(owner_cards_html)}</div>'
         if owner_cards_html
         else '<div class="empty">Nothing due today.</div>'
     )
