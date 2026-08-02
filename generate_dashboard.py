@@ -18,9 +18,9 @@ Filtering logic (window-based, not exact-day-match):
 
 Badge tiers:
     15 <= days_left <= 30   -> "30-Day Window"   (info blue)
-    1  <= days_left <= 14   -> "Expiring Soon"   (warning orange)
-    days_left == 0          -> "Expires Today"   (urgent red)
-    -15 <= days_left < 0    -> "Overdue (Nd)"    (critical dark red)
+    1  <= days_left <= 14   -> "Expiring Soon"   (warning amber, neon glow)
+    days_left == 0          -> "Expires Today"   (urgent red, neon glow)
+    -15 <= days_left < 0    -> "Overdue (Nd)"    (critical crimson, neon glow)
 
 Owners with more than one property inside the active window are grouped
 into a single card with one property row per property, so a repeat
@@ -29,11 +29,23 @@ owner doesn't show up as several duplicate-looking cards.
 A separate "Upcoming Renewals" table shows agreements further out
 (31-60 days) purely for visibility — nothing to act on yet.
 
-Design: dark, high-contrast theme, responsive (single column on phones,
-multi-column on laptop/desktop). Three lightweight motion effects:
-animated KPI count-up, staggered card entry on load, and a desktop-only
-hover glow gated behind @media (hover: hover) so phones never load or
-run that logic.
+Design: "AI command center" dark theme —
+  - Space Grotesk (headings) + JetBrains Mono (numbers/dates/badges),
+    loaded from Google Fonts with a system-font fallback stack so the
+    page still looks correct if the CDN is slow/blocked.
+  - True backdrop-filter glass cards (translucent + blur) per explicit
+    request — note this costs more on low-end phones and in bright
+    daylight than a solid-surface card would; blur radius is kept
+    modest (12px) to limit the cost.
+  - Neon glow on severity badges (not on the Send button, kept calm
+    since it's tapped repeatedly each session).
+  - Animated dual-ring radar sync indicator + faint background grid.
+  - Client-side search + severity filter chips (All / Overdue /
+    Expiring Soon / Today / 30-Day) — filters by owner, property, and
+    tenant name, and toggles card visibility by data-severity.
+
+Motion effects (KPI count-up, staggered entry, desktop-only hover glow)
+carried over unchanged from the previous pass.
 
 Known limitation: there is currently no "mark as renewed" mechanism, so
 a renewed agreement will keep showing (with an escalating overdue badge)
@@ -151,26 +163,24 @@ def wa_link(phone, message):
 
 def classify_badge(days_left):
     """
-    Returns (pill_css_class, pill_text, severity_rank) for a given days_left.
-    severity_rank is used to sort the queue most-urgent-first (higher = more urgent).
+    Returns (pill_css_class, pill_text, severity_rank, filter_key) for a
+    given days_left. severity_rank sorts the queue most-urgent-first.
+    filter_key is the value used by the client-side filter chips.
     Only meaningful for rows already known to be inside the active window.
     """
     if days_left < 0:
         overdue_by = abs(days_left)
-        return ("overdue", f"Overdue ({overdue_by}d)", 3 + overdue_by)
+        return ("overdue", f"Overdue ({overdue_by}d)", 3 + overdue_by, "overdue")
     if days_left == 0:
-        return ("today", "Expires Today", 3)
+        return ("today", "Expires Today", 3, "today")
     if days_left <= 14:
-        return ("soon", "Expiring Soon", 2)
-    return ("window30", "30-Day Window", 1)
+        return ("soon", "Expiring Soon", 2, "soon")
+    return ("window30", "30-Day Window", 1, "window30")
 
 
 # -------------------------------------------------------------------------
-# HTML template — dark, high-contrast, responsive. Flat surfaces (no blur)
-# for reliable legibility; system fonts only, no external CDN dependency;
-# multi-column on wide screens, single column on phones. Includes three
-# lightweight motion effects: KPI count-up, staggered card entry, and a
-# desktop-only hover glow gated behind @media (hover: hover).
+# HTML template — "AI command center" dark theme. See module docstring for
+# the full rationale on font loading, blur cost, and glow placement.
 # -------------------------------------------------------------------------
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -179,32 +189,55 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Rental Renewal Reminders — {generated_date}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {{
-    --bg: #0a0e14;
-    --surface: #131824;
+    --bg: #05070c;
+    --surface: rgba(19, 24, 38, 0.68);
+    --surface-solid: #131826;
     --surface-2: #1a2130;
-    --border: #262e3d;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.14);
     --text: #edf0f5;
     --text-dim: #8b96a8;
     --accent: #22c55e;
+    --accent-glow: #00f090;
     --accent-soft: rgba(34, 197, 94, 0.14);
     --primary: #6d8bff;
     --primary-soft: rgba(109, 139, 255, 0.14);
-    --danger: #f87171;
-    --danger-bg: rgba(248, 113, 113, 0.14);
-    --amber: #fbbf24;
-    --amber-bg: rgba(251, 191, 36, 0.14);
-    --critical: #ff5c7a;
-    --critical-bg: rgba(255, 92, 122, 0.18);
+    --danger: #ff4d6d;
+    --danger-bg: rgba(255, 77, 109, 0.16);
+    --danger-glow: rgba(255, 77, 109, 0.55);
+    --amber: #ffb020;
+    --amber-bg: rgba(255, 176, 32, 0.16);
+    --amber-glow: rgba(255, 176, 32, 0.5);
+    --critical: #ff2d55;
+    --critical-bg: rgba(255, 45, 85, 0.2);
+    --critical-glow: rgba(255, 45, 85, 0.6);
   }}
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+
+  /* Font stack: Space Grotesk / JetBrains Mono with robust system fallbacks
+     so the design degrades gracefully if the Google Fonts CDN is slow or
+     blocked, rather than silently reverting to an unstyled default. */
   body {{
     background: var(--bg);
+    background-image:
+      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px),
+      radial-gradient(ellipse 900px 400px at 50% -10%, rgba(109,139,255,0.10), transparent 60%);
+    background-size: 42px 42px, 42px 42px, 100% 100%;
+    background-attachment: fixed;
     color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
     padding: 28px 18px 60px;
     -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }}
+  .mono {{
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }}
   .page {{ max-width: 1180px; margin: 0 auto; }}
 
@@ -214,47 +247,128 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   }}
   .brand {{ display: flex; align-items: center; gap: 12px; }}
   .logo {{
-    width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
+    width: 40px; height: 40px; border-radius: 11px; flex-shrink: 0;
     background: linear-gradient(135deg, var(--primary), var(--accent));
     display: flex; align-items: center; justify-content: center;
-    font-weight: 800; font-size: 15px; color: #06101f;
+    font-weight: 700; font-size: 15px; color: #06101f;
+    box-shadow: 0 0 18px rgba(109, 139, 255, 0.35);
   }}
-  .top h1 {{ font-size: 20px; font-weight: 700; letter-spacing: -0.2px; }}
-  .top .date {{ font-size: 12.5px; color: var(--text-dim); margin-top: 1px; }}
-  .sync-badge {{
-    font-size: 11.5px; color: var(--accent); background: var(--accent-soft);
-    border: 1px solid rgba(34, 197, 94, 0.3); padding: 6px 12px; border-radius: 999px;
-    font-weight: 600; white-space: nowrap;
+  .top h1 {{
+    font-size: 19px; font-weight: 700; letter-spacing: 0.02em;
+  }}
+  .top .date {{
+    font-size: 11.5px; color: var(--text-dim); margin-top: 2px;
+    text-transform: uppercase; letter-spacing: 0.08em;
   }}
 
-  .stats {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 22px 0 28px; }}
-  .stat {{ background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }}
-  .stat .label {{ font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }}
-  .stat .value {{ font-size: 26px; font-weight: 800; margin-top: 5px; font-variant-numeric: tabular-nums; }}
+  /* Radar sync indicator: dual-ring pulse, pure CSS animation, negligible
+     cost (one small element, transform+opacity only). */
+  .sync-badge {{
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; color: var(--accent);
+    background: rgba(34, 197, 94, 0.08);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    padding: 7px 14px 7px 10px; border-radius: 999px;
+    font-weight: 600; white-space: nowrap;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }}
+  .radar {{ position: relative; width: 10px; height: 10px; flex-shrink: 0; }}
+  .radar-dot {{
+    position: absolute; inset: 3px; background: var(--accent-glow);
+    border-radius: 50%; box-shadow: 0 0 8px var(--accent-glow);
+  }}
+  .radar-ring {{
+    position: absolute; inset: 0; border-radius: 50%;
+    border: 1px solid var(--accent-glow);
+    animation: radar-pulse 2.2s ease-out infinite;
+  }}
+  .radar-ring.delay {{ animation-delay: 1.1s; }}
+  @keyframes radar-pulse {{
+    0%   {{ transform: scale(0.4); opacity: 0.9; }}
+    100% {{ transform: scale(2.6); opacity: 0; }}
+  }}
+
+  /* KPI row */
+  .stats {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 24px 0 30px; }}
+  .stat {{
+    background: var(--surface);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: 13px; padding: 16px;
+  }}
+  .stat .label {{
+    font-size: 10.5px; color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 0.08em; font-weight: 600;
+  }}
+  .stat .value {{
+    font-size: 27px; font-weight: 700; margin-top: 5px;
+    font-variant-numeric: tabular-nums;
+  }}
   .stat.warn .value {{ color: var(--danger); }}
   .stat.ok .value {{ color: var(--accent); }}
 
   h2 {{
-    font-size: 13px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;
-    letter-spacing: 0.6px; margin: 30px 0 12px; display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 12px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 0.08em; margin: 30px 0 12px; display: flex; justify-content: space-between; align-items: baseline;
   }}
-  h2 .count {{ font-size: 11.5px; font-weight: 600; color: var(--text-dim); text-transform: none; letter-spacing: 0; }}
+  h2 .count {{ font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: none; letter-spacing: 0; }}
 
+  /* Search + filter chips */
+  .toolbar {{
+    display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+    margin-bottom: 16px;
+  }}
+  .search-wrap {{
+    flex: 1 1 220px; position: relative;
+  }}
+  .search-input {{
+    width: 100%; background: var(--surface);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 14px 10px 34px; color: var(--text); font-size: 13.5px;
+    font-family: inherit;
+  }}
+  .search-input::placeholder {{ color: var(--text-dim); }}
+  .search-input:focus {{ outline: none; border-color: rgba(109,139,255,0.5); }}
+  .search-icon {{
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    color: var(--text-dim); font-size: 13px; pointer-events: none;
+  }}
+  .chips {{ display: flex; gap: 8px; flex-wrap: wrap; }}
+  .chip {{
+    background: var(--surface); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border); color: var(--text-dim);
+    font-size: 11.5px; font-weight: 600; padding: 8px 14px; border-radius: 999px;
+    cursor: pointer; text-transform: uppercase; letter-spacing: 0.04em;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }}
+  .chip.active {{
+    color: var(--text); border-color: rgba(109,139,255,0.55);
+    background: rgba(109,139,255,0.12);
+  }}
+
+  /* Owner cards — true glass: translucent + blur, per explicit request.
+     Blur kept at 12px (not higher) to limit GPU cost on lower-end phones. */
   .owner-grid {{ display: grid; grid-template-columns: 1fr; gap: 12px; }}
   .owner-card {{
-    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    background: var(--surface);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border); border-radius: 15px;
     padding: 18px; display: flex; flex-direction: column;
     opacity: 0; transform: translateY(10px);
     animation: card-in 0.45s ease forwards;
   }}
+  .owner-card.js-hidden {{ display: none; }}
   @keyframes card-in {{
     to {{ opacity: 1; transform: translateY(0); }}
   }}
   @media (hover: hover) and (pointer: fine) {{
     .owner-card {{ transition: box-shadow 0.2s ease, border-color 0.2s ease; }}
     .owner-card:hover {{
-      border-color: rgba(109, 139, 255, 0.4);
-      box-shadow: 0 0 0 1px rgba(109, 139, 255, 0.15), 0 8px 24px rgba(109, 139, 255, 0.12);
+      border-color: rgba(109, 139, 255, 0.45);
+      box-shadow: 0 0 0 1px rgba(109, 139, 255, 0.18), 0 10px 28px rgba(109, 139, 255, 0.14);
     }}
   }}
   .owner-head {{
@@ -262,7 +376,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     margin-bottom: 6px; flex-wrap: wrap;
   }}
   .owner-name {{ font-size: 15px; font-weight: 700; }}
-  .owner-count {{ font-size: 11.5px; color: var(--text-dim); font-weight: 500; }}
+  .owner-count {{
+    font-size: 11px; color: var(--text-dim); font-weight: 500;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }}
 
   .property-row {{
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -272,37 +389,61 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .property-main {{ min-width: 0; flex: 1 1 auto; }}
   .property-top {{ display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }}
   .flat-name {{ font-size: 13.5px; font-weight: 600; line-height: 1.35; }}
+
+  /* Severity badges: neon glow via layered box-shadow. This is the one
+     glow effect kept vivid, since it's the primary "read this fast"
+     signal on the page. */
   .pill {{
-    font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
-    text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; flex-shrink: 0;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 10px; font-weight: 600; padding: 4px 10px; border-radius: 999px;
+    text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; flex-shrink: 0;
   }}
   .pill.window30 {{ background: var(--primary-soft); color: var(--primary); }}
-  .pill.soon {{ background: var(--amber-bg); color: var(--amber); }}
-  .pill.today {{ background: var(--danger-bg); color: var(--danger); }}
-  .pill.overdue {{ background: var(--critical-bg); color: var(--critical); }}
-  .sub {{ font-size: 12px; color: var(--text-dim); margin-top: 3px; }}
+  .pill.soon {{
+    background: var(--amber-bg); color: var(--amber);
+    box-shadow: 0 0 10px var(--amber-glow);
+  }}
+  .pill.today {{
+    background: var(--danger-bg); color: var(--danger);
+    box-shadow: 0 0 10px var(--danger-glow);
+  }}
+  .pill.overdue {{
+    background: var(--critical-bg); color: var(--critical);
+    box-shadow: 0 0 12px var(--critical-glow);
+  }}
+  .sub {{ font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; color: var(--text-dim); margin-top: 3px; }}
+
+  /* Send button: deliberately calm, not glowing — it's tapped repeatedly
+     each session and shouldn't compete visually with the severity badge. */
   .send-btn {{
-    flex-shrink: 0; background: var(--accent); color: #06210f; font-weight: 700; font-size: 13px;
-    text-decoration: none; padding: 9px 18px; border-radius: 9px; white-space: nowrap;
-    align-self: center;
+    flex-shrink: 0; background: var(--accent); color: #06210f; font-weight: 700; font-size: 12.5px;
+    text-decoration: none; padding: 9px 16px; border-radius: 9px; white-space: nowrap;
+    align-self: center; display: inline-flex; align-items: center; gap: 5px;
   }}
 
-  .table-wrap {{ background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }}
+  .table-wrap {{
+    background: var(--surface); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border); border-radius: 13px; overflow: hidden;
+  }}
   table {{ width: 100%; border-collapse: collapse; }}
   th {{
-    text-align: left; font-size: 11px; color: var(--text-dim); text-transform: uppercase;
-    letter-spacing: 0.4px; font-weight: 700; padding: 12px 16px; border-bottom: 1px solid var(--border);
-    background: var(--surface-2);
+    text-align: left; font-size: 10.5px; color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 0.06em; font-weight: 700; padding: 12px 16px; border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
   }}
-  td {{ padding: 12px 16px; font-size: 13.5px; border-bottom: 1px solid var(--border); }}
+  td {{ padding: 12px 16px; font-size: 13px; border-bottom: 1px solid var(--border); font-family: 'JetBrains Mono', ui-monospace, monospace; }}
   tr:last-child td {{ border-bottom: none; }}
   .muted {{ color: var(--text-dim); }}
   .num {{ text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--amber); }}
   th:last-child {{ text-align: right; }}
 
-  .empty {{ font-size: 13px; color: var(--text-dim); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }}
+  .empty {{
+    font-size: 13px; color: var(--text-dim); background: var(--surface);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border); border-radius: 13px; padding: 16px 18px;
+  }}
 
-  footer {{ margin-top: 32px; font-size: 11.5px; color: var(--text-dim); line-height: 1.6; }}
+  footer {{ margin-top: 32px; font-size: 11px; color: var(--text-dim); line-height: 1.6; }}
 
   @media (min-width: 700px) {{
     .owner-grid {{ grid-template-columns: repeat(2, 1fr); }}
@@ -315,6 +456,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
   @media (prefers-reduced-motion: reduce) {{
     .owner-card {{ animation: none; opacity: 1; transform: none; }}
+    .radar-ring {{ animation: none; opacity: 0.4; }}
   }}
 </style>
 </head>
@@ -328,25 +470,54 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           <div class="date">{generated_date}</div>
         </div>
       </div>
-      <div class="sync-badge">● Last sync: {last_sync_display}</div>
+      <div class="sync-badge">
+        <span class="radar">
+          <span class="radar-ring"></span>
+          <span class="radar-ring delay"></span>
+          <span class="radar-dot"></span>
+        </span>
+        Last sync: {last_sync_display}
+      </div>
     </div>
 
     <div class="stats">
       <div class="stat">
         <div class="label">Tracked</div>
-        <div class="value" data-countup="{total_count}">0</div>
+        <div class="value mono" data-countup="{total_count}">0</div>
       </div>
       <div class="stat {due_stat_class}">
         <div class="label">Action Required</div>
-        <div class="value" data-countup="{due_count}">0</div>
+        <div class="value mono" data-countup="{due_count}">0</div>
       </div>
       <div class="stat">
         <div class="label">Next {upcoming_window} Days</div>
-        <div class="value" data-countup="{upcoming_count}">0</div>
+        <div class="value mono" data-countup="{upcoming_count}">0</div>
       </div>
     </div>
 
     <h2>Action Queue <span class="count">{owner_group_count}</span></h2>
+
+    <div class="toolbar">
+      <div class="search-wrap">
+        <span class="search-icon">⌕</span>
+        <input
+          type="text"
+          id="queueSearch"
+          class="search-input mono"
+          placeholder="Search owner, property, or tenant..."
+          autocomplete="off"
+        >
+      </div>
+      <div class="chips" id="filterChips">
+        <span class="chip active" data-filter="all">All</span>
+        <span class="chip" data-filter="overdue">Overdue</span>
+        <span class="chip" data-filter="today">Today</span>
+        <span class="chip" data-filter="soon">Expiring Soon</span>
+        <span class="chip" data-filter="window30">30-Day</span>
+      </div>
+    </div>
+
+    <div id="queueEmpty" class="empty" style="display:none;">No matches for this search or filter.</div>
     {due_section}
 
     <h2>Upcoming Renewals</h2>
@@ -366,6 +537,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   </div>
 
   <script>
+    // KPI count-up: runs once on load (~600ms), then stops. No continuous
+    // render loop, negligible cost after the numbers settle.
     (function () {{
       var reduceMotion = window.matchMedia &&
         window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -393,10 +566,54 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }});
     }})();
 
+    // Staggered entry: incremental animation-delay per card.
     (function () {{
       var cards = document.querySelectorAll('.owner-card');
       cards.forEach(function (card, i) {{
         card.style.animationDelay = (i * 60) + 'ms';
+      }});
+    }})();
+
+    // Search + severity filter. Pure client-side, filters by data
+    // attributes already present on each card — no network calls,
+    // cheap even with a few dozen cards.
+    (function () {{
+      var searchInput = document.getElementById('queueSearch');
+      var chips = document.querySelectorAll('#filterChips .chip');
+      var cards = document.querySelectorAll('.owner-card');
+      var emptyState = document.getElementById('queueEmpty');
+      var activeFilter = 'all';
+
+      function applyFilters() {{
+        var query = (searchInput.value || '').trim().toLowerCase();
+        var visibleCount = 0;
+
+        cards.forEach(function (card) {{
+          var owner = (card.getAttribute('data-owner') || '').toLowerCase();
+          var searchBlob = card.getAttribute('data-search') || '';
+          var severities = (card.getAttribute('data-severities') || '').split(',');
+
+          var matchesSearch = !query || searchBlob.indexOf(query) !== -1 || owner.indexOf(query) !== -1;
+          var matchesFilter = activeFilter === 'all' || severities.indexOf(activeFilter) !== -1;
+
+          var visible = matchesSearch && matchesFilter;
+          card.classList.toggle('js-hidden', !visible);
+          if (visible) visibleCount++;
+        }});
+
+        emptyState.style.display = (visibleCount === 0 && cards.length > 0) ? 'block' : 'none';
+      }}
+
+      if (searchInput) {{
+        searchInput.addEventListener('input', applyFilters);
+      }}
+      chips.forEach(function (chip) {{
+        chip.addEventListener('click', function () {{
+          chips.forEach(function (c) {{ c.classList.remove('active'); }});
+          chip.classList.add('active');
+          activeFilter = chip.getAttribute('data-filter');
+          applyFilters();
+        }});
       }});
     }})();
   </script>
@@ -404,8 +621,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </html>
 """
 
+# data-owner / data-search / data-severities power the client-side search
+# and filter chips. data-search is a lowercase blob of owner + every
+# property address + every tenant name on the card, built in Python so
+# the JS never needs to re-parse card contents.
 OWNER_CARD_TEMPLATE = """
-        <div class="owner-card">
+        <div class="owner-card" data-owner="{owner}" data-search="{search_blob}" data-severities="{severities}">
           <div class="owner-head">
             <span class="owner-name">{owner}</span>
             <span class="owner-count">{property_count}</span>
@@ -423,7 +644,7 @@ PROPERTY_ROW_TEMPLATE = """
               </div>
               <div class="sub">{tenant_line}ends {end_date_display}</div>
             </div>
-            <a class="send-btn" href="{link}" target="_blank" rel="noopener">Send</a>
+            <a class="send-btn" href="{link}" target="_blank" rel="noopener">Send ↗</a>
           </div>
 """
 
@@ -465,6 +686,8 @@ def main():
     today = date.today()
     due_by_owner = defaultdict(list)
     owner_max_severity = {}
+    owner_search_terms = defaultdict(list)
+    owner_filter_keys = defaultdict(set)
     upcoming_rows = []
     total_count = 0
     due_count = 0
@@ -496,7 +719,7 @@ def main():
             message = build_message(owner, flat, tenant, end_date_display)
             link = wa_link(phone, message)
 
-            pill_class, pill_text, severity = classify_badge(days_left)
+            pill_class, pill_text, severity, filter_key = classify_badge(days_left)
             tenant_line = f"Tenant: {html.escape(tenant)} &middot; " if tenant else ""
 
             property_row_html = PROPERTY_ROW_TEMPLATE.format(
@@ -511,6 +734,11 @@ def main():
             group_key = (owner, phone)
             due_by_owner[group_key].append(property_row_html)
             due_count += 1
+
+            owner_search_terms[group_key].append(flat.lower())
+            if tenant:
+                owner_search_terms[group_key].append(tenant.lower())
+            owner_filter_keys[group_key].add(filter_key)
 
             prior = owner_max_severity.get(group_key, -999)
             if severity > prior:
@@ -540,11 +768,19 @@ def main():
         property_count_label = (
             "1 property" if len(property_rows) == 1 else f"{len(property_rows)} properties"
         )
+        group_key = (owner, _phone)
+        search_blob = html.escape(
+            (owner.lower() + " " + " ".join(owner_search_terms[group_key])).strip()
+        )
+        severities = ",".join(sorted(owner_filter_keys[group_key]))
+
         owner_cards_html.append(
             OWNER_CARD_TEMPLATE.format(
                 owner=html.escape(owner),
                 property_count=property_count_label,
                 property_rows="".join(property_rows),
+                search_blob=search_blob,
+                severities=severities,
             )
         )
 
