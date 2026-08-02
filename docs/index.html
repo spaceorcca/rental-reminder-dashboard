@@ -4,32 +4,55 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Rental Renewal Reminders — 02 Aug 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0a0e14;
-    --surface: #131824;
+    --bg: #05070c;
+    --surface: rgba(19, 24, 38, 0.68);
+    --surface-solid: #131826;
     --surface-2: #1a2130;
-    --border: #262e3d;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.14);
     --text: #edf0f5;
     --text-dim: #8b96a8;
     --accent: #22c55e;
+    --accent-glow: #00f090;
     --accent-soft: rgba(34, 197, 94, 0.14);
     --primary: #6d8bff;
     --primary-soft: rgba(109, 139, 255, 0.14);
-    --danger: #f87171;
-    --danger-bg: rgba(248, 113, 113, 0.14);
-    --amber: #fbbf24;
-    --amber-bg: rgba(251, 191, 36, 0.14);
-    --critical: #ff5c7a;
-    --critical-bg: rgba(255, 92, 122, 0.18);
+    --danger: #ff4d6d;
+    --danger-bg: rgba(255, 77, 109, 0.16);
+    --danger-glow: rgba(255, 77, 109, 0.55);
+    --amber: #ffb020;
+    --amber-bg: rgba(255, 176, 32, 0.16);
+    --amber-glow: rgba(255, 176, 32, 0.5);
+    --critical: #ff2d55;
+    --critical-bg: rgba(255, 45, 85, 0.2);
+    --critical-glow: rgba(255, 45, 85, 0.6);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* Font stack: Space Grotesk / JetBrains Mono with robust system fallbacks
+     so the design degrades gracefully if the Google Fonts CDN is slow or
+     blocked, rather than silently reverting to an unstyled default. */
   body {
     background: var(--bg);
+    background-image:
+      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px),
+      radial-gradient(ellipse 900px 400px at 50% -10%, rgba(109,139,255,0.10), transparent 60%);
+    background-size: 42px 42px, 42px 42px, 100% 100%;
+    background-attachment: fixed;
     color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
     padding: 28px 18px 60px;
     -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+  .mono {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
   .page { max-width: 1180px; margin: 0 auto; }
 
@@ -39,47 +62,128 @@
   }
   .brand { display: flex; align-items: center; gap: 12px; }
   .logo {
-    width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
+    width: 40px; height: 40px; border-radius: 11px; flex-shrink: 0;
     background: linear-gradient(135deg, var(--primary), var(--accent));
     display: flex; align-items: center; justify-content: center;
-    font-weight: 800; font-size: 15px; color: #06101f;
+    font-weight: 700; font-size: 15px; color: #06101f;
+    box-shadow: 0 0 18px rgba(109, 139, 255, 0.35);
   }
-  .top h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.2px; }
-  .top .date { font-size: 12.5px; color: var(--text-dim); margin-top: 1px; }
-  .sync-badge {
-    font-size: 11.5px; color: var(--accent); background: var(--accent-soft);
-    border: 1px solid rgba(34, 197, 94, 0.3); padding: 6px 12px; border-radius: 999px;
-    font-weight: 600; white-space: nowrap;
+  .top h1 {
+    font-size: 19px; font-weight: 700; letter-spacing: 0.02em;
+  }
+  .top .date {
+    font-size: 11.5px; color: var(--text-dim); margin-top: 2px;
+    text-transform: uppercase; letter-spacing: 0.08em;
   }
 
-  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 22px 0 28px; }
-  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
-  .stat .label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
-  .stat .value { font-size: 26px; font-weight: 800; margin-top: 5px; font-variant-numeric: tabular-nums; }
+  /* Radar sync indicator: dual-ring pulse, pure CSS animation, negligible
+     cost (one small element, transform+opacity only). */
+  .sync-badge {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; color: var(--accent);
+    background: rgba(34, 197, 94, 0.08);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    padding: 7px 14px 7px 10px; border-radius: 999px;
+    font-weight: 600; white-space: nowrap;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .radar { position: relative; width: 10px; height: 10px; flex-shrink: 0; }
+  .radar-dot {
+    position: absolute; inset: 3px; background: var(--accent-glow);
+    border-radius: 50%; box-shadow: 0 0 8px var(--accent-glow);
+  }
+  .radar-ring {
+    position: absolute; inset: 0; border-radius: 50%;
+    border: 1px solid var(--accent-glow);
+    animation: radar-pulse 2.2s ease-out infinite;
+  }
+  .radar-ring.delay { animation-delay: 1.1s; }
+  @keyframes radar-pulse {
+    0%   { transform: scale(0.4); opacity: 0.9; }
+    100% { transform: scale(2.6); opacity: 0; }
+  }
+
+  /* KPI row */
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 24px 0 30px; }
+  .stat {
+    background: var(--surface);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: 13px; padding: 16px;
+  }
+  .stat .label {
+    font-size: 10.5px; color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 0.08em; font-weight: 600;
+  }
+  .stat .value {
+    font-size: 27px; font-weight: 700; margin-top: 5px;
+    font-variant-numeric: tabular-nums;
+  }
   .stat.warn .value { color: var(--danger); }
   .stat.ok .value { color: var(--accent); }
 
   h2 {
-    font-size: 13px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;
-    letter-spacing: 0.6px; margin: 30px 0 12px; display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 12px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 0.08em; margin: 30px 0 12px; display: flex; justify-content: space-between; align-items: baseline;
   }
-  h2 .count { font-size: 11.5px; font-weight: 600; color: var(--text-dim); text-transform: none; letter-spacing: 0; }
+  h2 .count { font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: none; letter-spacing: 0; }
 
+  /* Search + filter chips */
+  .toolbar {
+    display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+    margin-bottom: 16px;
+  }
+  .search-wrap {
+    flex: 1 1 220px; position: relative;
+  }
+  .search-input {
+    width: 100%; background: var(--surface);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 14px 10px 34px; color: var(--text); font-size: 13.5px;
+    font-family: inherit;
+  }
+  .search-input::placeholder { color: var(--text-dim); }
+  .search-input:focus { outline: none; border-color: rgba(109,139,255,0.5); }
+  .search-icon {
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    color: var(--text-dim); font-size: 13px; pointer-events: none;
+  }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    background: var(--surface); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border); color: var(--text-dim);
+    font-size: 11.5px; font-weight: 600; padding: 8px 14px; border-radius: 999px;
+    cursor: pointer; text-transform: uppercase; letter-spacing: 0.04em;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+  .chip.active {
+    color: var(--text); border-color: rgba(109,139,255,0.55);
+    background: rgba(109,139,255,0.12);
+  }
+
+  /* Owner cards — true glass: translucent + blur, per explicit request.
+     Blur kept at 12px (not higher) to limit GPU cost on lower-end phones. */
   .owner-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
   .owner-card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    background: var(--surface);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border); border-radius: 15px;
     padding: 18px; display: flex; flex-direction: column;
     opacity: 0; transform: translateY(10px);
     animation: card-in 0.45s ease forwards;
   }
+  .owner-card.js-hidden { display: none; }
   @keyframes card-in {
     to { opacity: 1; transform: translateY(0); }
   }
   @media (hover: hover) and (pointer: fine) {
     .owner-card { transition: box-shadow 0.2s ease, border-color 0.2s ease; }
     .owner-card:hover {
-      border-color: rgba(109, 139, 255, 0.4);
-      box-shadow: 0 0 0 1px rgba(109, 139, 255, 0.15), 0 8px 24px rgba(109, 139, 255, 0.12);
+      border-color: rgba(109, 139, 255, 0.45);
+      box-shadow: 0 0 0 1px rgba(109, 139, 255, 0.18), 0 10px 28px rgba(109, 139, 255, 0.14);
     }
   }
   .owner-head {
@@ -87,7 +191,10 @@
     margin-bottom: 6px; flex-wrap: wrap;
   }
   .owner-name { font-size: 15px; font-weight: 700; }
-  .owner-count { font-size: 11.5px; color: var(--text-dim); font-weight: 500; }
+  .owner-count {
+    font-size: 11px; color: var(--text-dim); font-weight: 500;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
 
   .property-row {
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -97,37 +204,61 @@
   .property-main { min-width: 0; flex: 1 1 auto; }
   .property-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .flat-name { font-size: 13.5px; font-weight: 600; line-height: 1.35; }
+
+  /* Severity badges: neon glow via layered box-shadow. This is the one
+     glow effect kept vivid, since it's the primary "read this fast"
+     signal on the page. */
   .pill {
-    font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
-    text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; flex-shrink: 0;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 10px; font-weight: 600; padding: 4px 10px; border-radius: 999px;
+    text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; flex-shrink: 0;
   }
   .pill.window30 { background: var(--primary-soft); color: var(--primary); }
-  .pill.soon { background: var(--amber-bg); color: var(--amber); }
-  .pill.today { background: var(--danger-bg); color: var(--danger); }
-  .pill.overdue { background: var(--critical-bg); color: var(--critical); }
-  .sub { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
+  .pill.soon {
+    background: var(--amber-bg); color: var(--amber);
+    box-shadow: 0 0 10px var(--amber-glow);
+  }
+  .pill.today {
+    background: var(--danger-bg); color: var(--danger);
+    box-shadow: 0 0 10px var(--danger-glow);
+  }
+  .pill.overdue {
+    background: var(--critical-bg); color: var(--critical);
+    box-shadow: 0 0 12px var(--critical-glow);
+  }
+  .sub { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; color: var(--text-dim); margin-top: 3px; }
+
+  /* Send button: deliberately calm, not glowing — it's tapped repeatedly
+     each session and shouldn't compete visually with the severity badge. */
   .send-btn {
-    flex-shrink: 0; background: var(--accent); color: #06210f; font-weight: 700; font-size: 13px;
-    text-decoration: none; padding: 9px 18px; border-radius: 9px; white-space: nowrap;
-    align-self: center;
+    flex-shrink: 0; background: var(--accent); color: #06210f; font-weight: 700; font-size: 12.5px;
+    text-decoration: none; padding: 9px 16px; border-radius: 9px; white-space: nowrap;
+    align-self: center; display: inline-flex; align-items: center; gap: 5px;
   }
 
-  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .table-wrap {
+    background: var(--surface); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border); border-radius: 13px; overflow: hidden;
+  }
   table { width: 100%; border-collapse: collapse; }
   th {
-    text-align: left; font-size: 11px; color: var(--text-dim); text-transform: uppercase;
-    letter-spacing: 0.4px; font-weight: 700; padding: 12px 16px; border-bottom: 1px solid var(--border);
-    background: var(--surface-2);
+    text-align: left; font-size: 10.5px; color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 0.06em; font-weight: 700; padding: 12px 16px; border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
   }
-  td { padding: 12px 16px; font-size: 13.5px; border-bottom: 1px solid var(--border); }
+  td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid var(--border); font-family: 'JetBrains Mono', ui-monospace, monospace; }
   tr:last-child td { border-bottom: none; }
   .muted { color: var(--text-dim); }
   .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--amber); }
   th:last-child { text-align: right; }
 
-  .empty { font-size: 13px; color: var(--text-dim); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+  .empty {
+    font-size: 13px; color: var(--text-dim); background: var(--surface);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border); border-radius: 13px; padding: 16px 18px;
+  }
 
-  footer { margin-top: 32px; font-size: 11.5px; color: var(--text-dim); line-height: 1.6; }
+  footer { margin-top: 32px; font-size: 11px; color: var(--text-dim); line-height: 1.6; }
 
   @media (min-width: 700px) {
     .owner-grid { grid-template-columns: repeat(2, 1fr); }
@@ -140,6 +271,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .owner-card { animation: none; opacity: 1; transform: none; }
+    .radar-ring { animation: none; opacity: 0.4; }
   }
 </style>
 </head>
@@ -153,27 +285,56 @@
           <div class="date">02 Aug 2026</div>
         </div>
       </div>
-      <div class="sync-badge">● Last sync: 2026-08-01 18:04:25</div>
+      <div class="sync-badge">
+        <span class="radar">
+          <span class="radar-ring"></span>
+          <span class="radar-ring delay"></span>
+          <span class="radar-dot"></span>
+        </span>
+        Last sync: 2026-08-02 04:54:36
+      </div>
     </div>
 
     <div class="stats">
       <div class="stat">
         <div class="label">Tracked</div>
-        <div class="value" data-countup="59">0</div>
+        <div class="value mono" data-countup="59">0</div>
       </div>
       <div class="stat warn">
         <div class="label">Action Required</div>
-        <div class="value" data-countup="12">0</div>
+        <div class="value mono" data-countup="12">0</div>
       </div>
       <div class="stat">
         <div class="label">Next 60 Days</div>
-        <div class="value" data-countup="4">0</div>
+        <div class="value mono" data-countup="4">0</div>
       </div>
     </div>
 
     <h2>Action Queue <span class="count">11 owners</span></h2>
+
+    <div class="toolbar">
+      <div class="search-wrap">
+        <span class="search-icon">⌕</span>
+        <input
+          type="text"
+          id="queueSearch"
+          class="search-input mono"
+          placeholder="Search owner, property, or tenant..."
+          autocomplete="off"
+        >
+      </div>
+      <div class="chips" id="filterChips">
+        <span class="chip active" data-filter="all">All</span>
+        <span class="chip" data-filter="overdue">Overdue</span>
+        <span class="chip" data-filter="today">Today</span>
+        <span class="chip" data-filter="soon">Expiring Soon</span>
+        <span class="chip" data-filter="window30">30-Day</span>
+      </div>
+    </div>
+
+    <div id="queueEmpty" class="empty" style="display:none;">No matches for this search or filter.</div>
     <div class="owner-grid">
-        <div class="owner-card">
+        <div class="owner-card" data-owner="Mustafa Hathiyari" data-search="mustafa hathiyari j-408 ganga millennia, undri, pune - 411060 reddy nikita kanhaiya" data-severities="overdue">
           <div class="owner-head">
             <span class="owner-name">Mustafa Hathiyari</span>
             <span class="owner-count">1 property</span>
@@ -187,12 +348,12 @@
               </div>
               <div class="sub">Tenant: Reddy Nikita Kanhaiya &middot; ends 31 Jul 2026</div>
             </div>
-            <a class="send-btn" href="https://wa.me/919890952753?text=%E2%9C%A6%20Hi%20Mustafa%20Hathiyari%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2AJ-408%20Ganga%20Millennia%2C%20Undri%2C%20Pune%20-%20411060%2A%20%28occupied%20by%20%2AReddy%20Nikita%20Kanhaiya%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A31%20Jul%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send</a>
+            <a class="send-btn" href="https://wa.me/919890952753?text=%E2%9C%A6%20Hi%20Mustafa%20Hathiyari%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2AJ-408%20Ganga%20Millennia%2C%20Undri%2C%20Pune%20-%20411060%2A%20%28occupied%20by%20%2AReddy%20Nikita%20Kanhaiya%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A31%20Jul%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send ↗</a>
           </div>
 
         </div>
 
-        <div class="owner-card">
+        <div class="owner-card" data-owner="Faizan Memon" data-search="faizan memon 104 - shalimar estate, kondhwa khurd, pune - 411048 badiwala mehrunnisa asi 304 - shalimar estate, kondhwa khurd, pune - 411048 imroz khan pathan" data-severities="overdue">
           <div class="owner-head">
             <span class="owner-name">Faizan Memon</span>
             <span class="owner-count">2 properties</span>
@@ -206,7 +367,7 @@
               </div>
               <div class="sub">Tenant: Badiwala Mehrunnisa Asi &middot; ends 31 Jul 2026</div>
             </div>
-            <a class="send-btn" href="https://wa.me/919657433109?text=%E2%9C%A6%20Hi%20Faizan%20Memon%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2A104%20-%20Shalimar%20Estate%2C%20Kondhwa%20Khurd%2C%20Pune%20-%20411048%2A%20%28occupied%20by%20%2ABadiwala%20Mehrunnisa%20Asi%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A31%20Jul%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send</a>
+            <a class="send-btn" href="https://wa.me/919657433109?text=%E2%9C%A6%20Hi%20Faizan%20Memon%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2A104%20-%20Shalimar%20Estate%2C%20Kondhwa%20Khurd%2C%20Pune%20-%20411048%2A%20%28occupied%20by%20%2ABadiwala%20Mehrunnisa%20Asi%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A31%20Jul%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send ↗</a>
           </div>
 
           <div class="property-row">
@@ -217,12 +378,12 @@
               </div>
               <div class="sub">Tenant: Imroz Khan Pathan &middot; ends 31 Jul 2026</div>
             </div>
-            <a class="send-btn" href="https://wa.me/919657433109?text=%E2%9C%A6%20Hi%20Faizan%20Memon%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2A304%20-%20Shalimar%20Estate%2C%20Kondhwa%20Khurd%2C%20Pune%20-%20411048%2A%20%28occupied%20by%20%2AImroz%20Khan%20Pathan%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A31%20Jul%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send</a>
+            <a class="send-btn" href="https://wa.me/919657433109?text=%E2%9C%A6%20Hi%20Faizan%20Memon%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2A304%20-%20Shalimar%20Estate%2C%20Kondhwa%20Khurd%2C%20Pune%20-%20411048%2A%20%28occupied%20by%20%2AImroz%20Khan%20Pathan%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A31%20Jul%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send ↗</a>
           </div>
 
         </div>
 
-        <div class="owner-card">
+        <div class="owner-card" data-owner="Shahrukh Sayyad" data-search="shahrukh sayyad 405 - shalimar heights, kondhwa khurd, pune - 411048 memon mateen mohammed vaseem" data-severities="overdue">
           <div class="owner-head">
             <span class="owner-name">Shahrukh Sayyad</span>
             <span class="owner-count">1 property</span>
@@ -236,12 +397,12 @@
               </div>
               <div class="sub">Tenant: Memon Mateen Mohammed Vaseem &middot; ends 31 Jul 2026</div>
             </div>
-            <a class="send-btn" href="https://wa.me/917972423047?text=%E2%9C%A6%20Hi%20Shahrukh%20Sayyad%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2A405%20-%20Shalimar%20Heights%2C%20Kondhwa%20Khurd%2C%20Pune%20-%20411048%2A%20%28occupied%20by%20%2AMemon%20Mateen%20Mohammed%20Vaseem%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A31%20Jul%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send</a>
+            <a class="send-btn" href="https://wa.me/917972423047?text=%E2%9C%A6%20Hi%20Shahrukh%20Sayyad%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2A405%20-%20Shalimar%20Heights%2C%20Kondhwa%20Khurd%2C%20Pune%20-%20411048%2A%20%28occupied%20by%20%2AMemon%20Mateen%20Mohammed%20Vaseem%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A31%20Jul%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send ↗</a>
           </div>
 
         </div>
 
-        <div class="owner-card">
+        <div class="owner-card" data-owner="Mohd Rizwanuddin" data-search="mohd rizwanuddin 903 - notting hills, near d-mart, kondhwa, pune - 411048 nadaf amin nabisahab" data-severities="overdue">
           <div class="owner-head">
             <span class="owner-name">Mohd Rizwanuddin</span>
             <span class="owner-count">1 property</span>
@@ -255,12 +416,12 @@
               </div>
               <div class="sub">Tenant: Nadaf Amin Nabisahab &middot; ends 31 Jul 2026</div>
             </div>
-            <a class="send-btn" href="https://wa.me/919881786710?text=%E2%9C%A6%20Hi%20Mohd%20Rizwanuddin%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2A903%20-%20Notting%20Hills%2C%20Near%20D-Mart%2C%20Kondhwa%2C%20Pune%20-%20411048%2A%20%28occupied%20by%20%2ANadaf%20Amin%20Nabisahab%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A31%20Jul%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send</a>
+            <a class="send-btn" href="https://wa.me/919881786710?text=%E2%9C%A6%20Hi%20Mohd%20Rizwanuddin%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2A903%20-%20Notting%20Hills%2C%20Near%20D-Mart%2C%20Kondhwa%2C%20Pune%20-%20411048%2A%20%28occupied%20by%20%2ANadaf%20Amin%20Nabisahab%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A31%20Jul%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send ↗</a>
           </div>
 
         </div>
 
-        <div class="owner-card">
+        <div class="owner-card" data-owner="Khan Ruksana Yasin" data-search="khan ruksana yasin survey number :54,road: lane no.9b, near bhawani mata, shivneri nagar sayyad shahrukh kayyum" data-severities="overdue">
           <div class="owner-head">
             <span class="owner-name">Khan Ruksana Yasin</span>
             <span class="owner-count">1 property</span>
@@ -274,12 +435,12 @@
               </div>
               <div class="sub">Tenant: Sayyad Shahrukh Kayyum &middot; ends 31 Jul 2026</div>
             </div>
-            <a class="send-btn" href="https://wa.me/917972423047?text=%E2%9C%A6%20Hi%20Khan%20Ruksana%20Yasin%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2ASurvey%20Number%20%3A54%2CRoad%3A%20Lane%20No.9B%2C%20Near%20Bhawani%20Mata%2C%20Shivneri%20Nagar%2A%20%28occupied%20by%20%2ASayyad%20Shahrukh%20Kayyum%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A31%20Jul%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send</a>
+            <a class="send-btn" href="https://wa.me/917972423047?text=%E2%9C%A6%20Hi%20Khan%20Ruksana%20Yasin%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2ASurvey%20Number%20%3A54%2CRoad%3A%20Lane%20No.9B%2C%20Near%20Bhawani%20Mata%2C%20Shivneri%20Nagar%2A%20%28occupied%20by%20%2ASayyad%20Shahrukh%20Kayyum%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A31%20Jul%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send ↗</a>
           </div>
 
         </div>
 
-        <div class="owner-card">
+        <div class="owner-card" data-owner="Imran Khan" data-search="imran khan 302 - zehfaco cascad, mithanagar, kondhwa khurd, pune - 411048 shaikh sadik ibrahim" data-severities="soon">
           <div class="owner-head">
             <span class="owner-name">Imran Khan</span>
             <span class="owner-count">1 property</span>
@@ -293,12 +454,12 @@
               </div>
               <div class="sub">Tenant: Shaikh Sadik Ibrahim &middot; ends 11 Aug 2026</div>
             </div>
-            <a class="send-btn" href="https://wa.me/918668917796?text=%E2%9C%A6%20Hi%20Imran%20Khan%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2A302%20-%20Zehfaco%20Cascad%2C%20Mithanagar%2C%20Kondhwa%20Khurd%2C%20Pune%20-%20411048%2A%20%28occupied%20by%20%2AShaikh%20Sadik%20Ibrahim%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A11%20Aug%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send</a>
+            <a class="send-btn" href="https://wa.me/918668917796?text=%E2%9C%A6%20Hi%20Imran%20Khan%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2A302%20-%20Zehfaco%20Cascad%2C%20Mithanagar%2C%20Kondhwa%20Khurd%2C%20Pune%20-%20411048%2A%20%28occupied%20by%20%2AShaikh%20Sadik%20Ibrahim%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A11%20Aug%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send ↗</a>
           </div>
 
         </div>
 
-        <div class="owner-card">
+        <div class="owner-card" data-owner="Naeem Shaikh" data-search="naeem shaikh 203 - a s khan apartment, inam nagar, kondhwa, pune - 411048 sayyed shaibaz ashfaque" data-severities="soon">
           <div class="owner-head">
             <span class="owner-name">Naeem Shaikh</span>
             <span class="owner-count">1 property</span>
@@ -312,12 +473,12 @@
               </div>
               <div class="sub">Tenant: Sayyed Shaibaz Ashfaque &middot; ends 14 Aug 2026</div>
             </div>
-            <a class="send-btn" href="https://wa.me/919890216700?text=%E2%9C%A6%20Hi%20Naeem%20Shaikh%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2A203%20-%20A%20S%20Khan%20Apartment%2C%20Inam%20Nagar%2C%20Kondhwa%2C%20Pune%20-%20411048%2A%20%28occupied%20by%20%2ASayyed%20Shaibaz%20Ashfaque%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A14%20Aug%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send</a>
+            <a class="send-btn" href="https://wa.me/919890216700?text=%E2%9C%A6%20Hi%20Naeem%20Shaikh%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2A203%20-%20A%20S%20Khan%20Apartment%2C%20Inam%20Nagar%2C%20Kondhwa%2C%20Pune%20-%20411048%2A%20%28occupied%20by%20%2ASayyed%20Shaibaz%20Ashfaque%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A14%20Aug%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send ↗</a>
           </div>
 
         </div>
 
-        <div class="owner-card">
+        <div class="owner-card" data-owner="Altamash" data-search="altamash e-805 shalimar hill park phase 2, kondhwa, pune - 411048 khan fareen ashraf" data-severities="window30">
           <div class="owner-head">
             <span class="owner-name">Altamash</span>
             <span class="owner-count">1 property</span>
@@ -331,12 +492,12 @@
               </div>
               <div class="sub">Tenant: Khan Fareen Ashraf &middot; ends 31 Aug 2026</div>
             </div>
-            <a class="send-btn" href="https://wa.me/918080841365?text=%E2%9C%A6%20Hi%20Altamash%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2AE-805%20Shalimar%20Hill%20Park%20Phase%202%2C%20Kondhwa%2C%20Pune%20-%20411048%2A%20%28occupied%20by%20%2AKhan%20Fareen%20Ashraf%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A31%20Aug%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send</a>
+            <a class="send-btn" href="https://wa.me/918080841365?text=%E2%9C%A6%20Hi%20Altamash%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2AE-805%20Shalimar%20Hill%20Park%20Phase%202%2C%20Kondhwa%2C%20Pune%20-%20411048%2A%20%28occupied%20by%20%2AKhan%20Fareen%20Ashraf%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A31%20Aug%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send ↗</a>
           </div>
 
         </div>
 
-        <div class="owner-card">
+        <div class="owner-card" data-owner="Fehmida Shaikh" data-search="fehmida shaikh 503 - haroon enclave, kondhwa khurd, pune - 411048 qureshi irfan ali" data-severities="window30">
           <div class="owner-head">
             <span class="owner-name">Fehmida Shaikh</span>
             <span class="owner-count">1 property</span>
@@ -350,12 +511,12 @@
               </div>
               <div class="sub">Tenant: Qureshi Irfan Ali &middot; ends 31 Aug 2026</div>
             </div>
-            <a class="send-btn" href="https://wa.me/919373144316?text=%E2%9C%A6%20Hi%20Fehmida%20Shaikh%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2A503%20-%20Haroon%20Enclave%2C%20Kondhwa%20Khurd%2C%20Pune%20-%20411048%2A%20%28occupied%20by%20%2AQureshi%20Irfan%20Ali%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A31%20Aug%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send</a>
+            <a class="send-btn" href="https://wa.me/919373144316?text=%E2%9C%A6%20Hi%20Fehmida%20Shaikh%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2A503%20-%20Haroon%20Enclave%2C%20Kondhwa%20Khurd%2C%20Pune%20-%20411048%2A%20%28occupied%20by%20%2AQureshi%20Irfan%20Ali%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A31%20Aug%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send ↗</a>
           </div>
 
         </div>
 
-        <div class="owner-card">
+        <div class="owner-card" data-owner="Goyal Rishi Raj" data-search="goyal rishi raj j-903 ganga millennia, undri, pune - 411060 kumar mayur" data-severities="window30">
           <div class="owner-head">
             <span class="owner-name">Goyal Rishi Raj</span>
             <span class="owner-count">1 property</span>
@@ -369,12 +530,12 @@
               </div>
               <div class="sub">Tenant: Kumar Mayur &middot; ends 31 Aug 2026</div>
             </div>
-            <a class="send-btn" href="https://wa.me/919890952753?text=%E2%9C%A6%20Hi%20Goyal%20Rishi%20Raj%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2AJ-903%20Ganga%20Millennia%2C%20Undri%2C%20Pune%20-%20411060%2A%20%28occupied%20by%20%2AKumar%20Mayur%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A31%20Aug%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send</a>
+            <a class="send-btn" href="https://wa.me/919890952753?text=%E2%9C%A6%20Hi%20Goyal%20Rishi%20Raj%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2AJ-903%20Ganga%20Millennia%2C%20Undri%2C%20Pune%20-%20411060%2A%20%28occupied%20by%20%2AKumar%20Mayur%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A31%20Aug%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send ↗</a>
           </div>
 
         </div>
 
-        <div class="owner-card">
+        <div class="owner-card" data-owner="Nadaf Mohammed Mushtaq" data-search="nadaf mohammed mushtaq 702 - rukiya heights, kondhwa khurd, pune - 411048 lokhandwala iqbalhussain abdul kadir" data-severities="window30">
           <div class="owner-head">
             <span class="owner-name">Nadaf Mohammed Mushtaq</span>
             <span class="owner-count">1 property</span>
@@ -388,7 +549,7 @@
               </div>
               <div class="sub">Tenant: Lokhandwala Iqbalhussain Abdul Kadir &middot; ends 31 Aug 2026</div>
             </div>
-            <a class="send-btn" href="https://wa.me/919970169147?text=%E2%9C%A6%20Hi%20Nadaf%20Mohammed%20Mushtaq%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2A702%20-%20Rukiya%20Heights%2C%20Kondhwa%20Khurd%2C%20Pune%20-%20411048%2A%20%28occupied%20by%20%2ALokhandwala%20Iqbalhussain%20Abdul%20Kadir%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A31%20Aug%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send</a>
+            <a class="send-btn" href="https://wa.me/919970169147?text=%E2%9C%A6%20Hi%20Nadaf%20Mohammed%20Mushtaq%21%0A%0AYour%20rental%20agreement%20for%20%E2%9C%A6%20%2A702%20-%20Rukiya%20Heights%2C%20Kondhwa%20Khurd%2C%20Pune%20-%20411048%2A%20%28occupied%20by%20%2ALokhandwala%20Iqbalhussain%20Abdul%20Kadir%2A%29%20will%20end%20on%20%E2%9C%A6%20%2A31%20Aug%202026%2A.%0ALet%27s%20make%20sure%20everything%20stays%20smooth%20and%20stress-free%21%0A%0A%E2%9C%A6%20Why%20renewing%20is%20the%20best%20choice%3A%0A%E2%9E%A4%20Avoid%20last-minute%20hassle%0A%E2%9E%A4%20Keep%20your%20property%20secure%0A%E2%9E%A4%20Enjoy%20uninterrupted%20rental%20income%0A%E2%9E%A4%20Ensure%20peace%20of%20mind%20with%20a%20confirmed%20extension%0A%0AWe%20truly%20value%20this%20great%20partnership%20and%20want%20to%20keep%20things%20simple%20and%20beneficial%20for%20you.%0A%0ALooking%20forward%20to%20continuing%20this%20positive%20experience%21%0A%0A%E2%9C%A6%20Cheers%2C%0A%E2%9C%A6%20Talib%0A%E2%9C%A6%20Contact%3A%207020204238" target="_blank" rel="noopener">Send ↗</a>
           </div>
 
         </div>
@@ -439,6 +600,8 @@
   </div>
 
   <script>
+    // KPI count-up: runs once on load (~600ms), then stops. No continuous
+    // render loop, negligible cost after the numbers settle.
     (function () {
       var reduceMotion = window.matchMedia &&
         window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -466,10 +629,54 @@
       });
     })();
 
+    // Staggered entry: incremental animation-delay per card.
     (function () {
       var cards = document.querySelectorAll('.owner-card');
       cards.forEach(function (card, i) {
         card.style.animationDelay = (i * 60) + 'ms';
+      });
+    })();
+
+    // Search + severity filter. Pure client-side, filters by data
+    // attributes already present on each card — no network calls,
+    // cheap even with a few dozen cards.
+    (function () {
+      var searchInput = document.getElementById('queueSearch');
+      var chips = document.querySelectorAll('#filterChips .chip');
+      var cards = document.querySelectorAll('.owner-card');
+      var emptyState = document.getElementById('queueEmpty');
+      var activeFilter = 'all';
+
+      function applyFilters() {
+        var query = (searchInput.value || '').trim().toLowerCase();
+        var visibleCount = 0;
+
+        cards.forEach(function (card) {
+          var owner = (card.getAttribute('data-owner') || '').toLowerCase();
+          var searchBlob = card.getAttribute('data-search') || '';
+          var severities = (card.getAttribute('data-severities') || '').split(',');
+
+          var matchesSearch = !query || searchBlob.indexOf(query) !== -1 || owner.indexOf(query) !== -1;
+          var matchesFilter = activeFilter === 'all' || severities.indexOf(activeFilter) !== -1;
+
+          var visible = matchesSearch && matchesFilter;
+          card.classList.toggle('js-hidden', !visible);
+          if (visible) visibleCount++;
+        });
+
+        emptyState.style.display = (visibleCount === 0 && cards.length > 0) ? 'block' : 'none';
+      }
+
+      if (searchInput) {
+        searchInput.addEventListener('input', applyFilters);
+      }
+      chips.forEach(function (chip) {
+        chip.addEventListener('click', function () {
+          chips.forEach(function (c) { c.classList.remove('active'); });
+          chip.classList.add('active');
+          activeFilter = chip.getAttribute('data-filter');
+          applyFilters();
+        });
       });
     })();
   </script>
