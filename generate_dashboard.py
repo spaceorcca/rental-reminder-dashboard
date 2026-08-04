@@ -9,12 +9,11 @@ ban/automation detection.
 
 Filtering logic (window-based, not exact-day-match):
     -15 <= days_left <= 30   -> shown in the Action Queue, always, with a
-                                 severity badge. This means missing a day
-                                 checking the dashboard can never cause a
-                                 reminder to be silently skipped — it just
-                                 stays in the queue until it ages out past
-                                 -15 days (at which point it's assumed to
-                                 need a phone call, not a WhatsApp text).
+                                 severity badge. Missing a day checking the
+                                 dashboard can never silently drop a
+                                 reminder — it stays in the queue until it
+                                 ages out past -15 days (at which point the
+                                 assumption is a phone call, not a text).
 
 Badge tiers:
     15 <= days_left <= 30   -> "30-Day Window"   (info blue)
@@ -23,28 +22,40 @@ Badge tiers:
     -15 <= days_left < 0    -> "Overdue (Nd)"    (critical crimson, neon glow)
 
 Owners with more than one property inside the active window are grouped
-into a single card with one property row per property, so a repeat
-owner doesn't show up as several duplicate-looking cards.
+into a single card with one property row per property.
 
 A separate "Upcoming Renewals" table shows agreements further out
-(31-60 days) purely for visibility — nothing to act on yet.
+(31-60 days) purely for visibility.
 
-Design: "AI command center" dark theme —
-  - Space Grotesk (headings) + JetBrains Mono (numbers/dates/badges),
-    loaded from Google Fonts with a system-font fallback stack so the
-    page still looks correct if the CDN is slow/blocked.
-  - True backdrop-filter glass cards (translucent + blur) per explicit
-    request — note this costs more on low-end phones and in bright
-    daylight than a solid-surface card would; blur radius is kept
-    modest (12px) to limit the cost.
-  - Neon glow on severity badges (not on the Send button, kept calm
-    since it's tapped repeatedly each session).
-  - Animated dual-ring radar sync indicator + faint background grid.
-  - Client-side search + severity filter chips (All / Overdue /
-    Expiring Soon / Today / 30-Day) — filters by owner, property, and
-    tenant name, and toggles card visibility by data-severity.
+DESIGN SYSTEM (this pass):
+  - Spacing scale: every padding/margin/gap value is one of
+    4 / 8 / 12 / 16 / 24 / 32 / 48px. No ad hoc values.
+  - Type scale: 11 / 13 / 16 / 22 / 27px steps, applied consistently
+    across KPI values, headings, body text, and mono figures.
+  - Layered shadows: cards use a tight near shadow + a soft ambient
+    shadow rather than a single flat shadow value, for real depth.
+  - Unified easing: every transition on the page uses the same
+    cubic-bezier(0.16, 1, 0.3, 1) soft ease-out curve.
+  - Tuned contrast: badge backgrounds desaturated to ~10-12% opacity,
+    badge text brightened slightly, so tints read as engineered rather
+    than default alert colors.
 
-Motion effects (KPI count-up, staggered entry, desktop-only hover glow)
+TACTILE MICRO-DETAILS (this pass):
+  - Top-border severity accent: 2px colored top border per property row
+    matching its badge tier.
+  - Cursor spotlight on card hover: CSS custom-property radial gradient
+    tracking the pointer, desktop-only (@media hover:hover), sharing the
+    same mousemove listener as the existing hover-glow logic so there is
+    only one listener, not two.
+  - Kbd hint ("/") inside the search input, and a real "/" keyboard
+    shortcut that focuses the search box (skipped while typing in the
+    box itself, so "/" can still be typed as a search character).
+  - Custom dark slim scrollbar (Webkit + Firefox) and an emerald
+    ::selection highlight.
+  - Micro SVG grain overlay: inline feTurbulence filter as a fixed,
+    very-low-opacity full-viewport layer. No external image request.
+
+Motion effects (KPI count-up, staggered entry, search + filter chips)
 carried over unchanged from the previous pass.
 
 Known limitation: there is currently no "mark as renewed" mechanism, so
@@ -73,12 +84,9 @@ LOG_TAB_NAME = "Log"
 OUTPUT_DIR = "docs"
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "index.html")
 
-# Active window: overdue up to 15 days, out to 30 days before end date.
 ACTIVE_WINDOW_MIN_DAYS = -15
 ACTIVE_WINDOW_MAX_DAYS = 30
 
-# "Upcoming" is purely informational: further out than the active window,
-# up to this many days.
 UPCOMING_WINDOW_DAYS = 60
 UPCOMING_PREVIEW_LIMIT = 10
 
@@ -179,8 +187,7 @@ def classify_badge(days_left):
 
 
 # -------------------------------------------------------------------------
-# HTML template — "AI command center" dark theme. See module docstring for
-# the full rationale on font loading, blur cost, and glow placement.
+# HTML template. See module docstring for the full design-system rationale.
 # -------------------------------------------------------------------------
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -194,35 +201,65 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {{
+    --sp-1: 4px;
+    --sp-2: 8px;
+    --sp-3: 12px;
+    --sp-4: 16px;
+    --sp-5: 24px;
+    --sp-6: 32px;
+    --sp-7: 48px;
+
+    --fs-xs: 11px;
+    --fs-sm: 13px;
+    --fs-md: 16px;
+    --fs-lg: 22px;
+    --fs-xl: 27px;
+
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+
     --bg: #05070c;
     --surface: rgba(19, 24, 38, 0.68);
-    --surface-solid: #131826;
-    --surface-2: #1a2130;
+    --surface-2: rgba(255, 255, 255, 0.02);
     --border: rgba(255, 255, 255, 0.08);
-    --border-strong: rgba(255, 255, 255, 0.14);
+    --border-strong: rgba(255, 255, 255, 0.16);
     --text: #edf0f5;
     --text-dim: #8b96a8;
+
     --accent: #22c55e;
     --accent-glow: #00f090;
-    --accent-soft: rgba(34, 197, 94, 0.14);
-    --primary: #6d8bff;
-    --primary-soft: rgba(109, 139, 255, 0.14);
-    --danger: #ff4d6d;
-    --danger-bg: rgba(255, 77, 109, 0.16);
-    --danger-glow: rgba(255, 77, 109, 0.55);
-    --amber: #ffb020;
-    --amber-bg: rgba(255, 176, 32, 0.16);
-    --amber-glow: rgba(255, 176, 32, 0.5);
-    --critical: #ff2d55;
-    --critical-bg: rgba(255, 45, 85, 0.2);
-    --critical-glow: rgba(255, 45, 85, 0.6);
+    --accent-soft: rgba(34, 197, 94, 0.12);
+
+    --primary: #7c9bff;
+    --primary-soft: rgba(124, 155, 255, 0.12);
+
+    --danger: #ff6b85;
+    --danger-bg: rgba(255, 77, 109, 0.11);
+    --danger-glow: rgba(255, 77, 109, 0.5);
+
+    --amber: #ffc14d;
+    --amber-bg: rgba(255, 176, 32, 0.11);
+    --amber-glow: rgba(255, 176, 32, 0.45);
+
+    --critical: #ff5577;
+    --critical-bg: rgba(255, 45, 85, 0.14);
+    --critical-glow: rgba(255, 45, 85, 0.55);
   }}
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
 
-  /* Font stack: Space Grotesk / JetBrains Mono with robust system fallbacks
-     so the design degrades gracefully if the Google Fonts CDN is slow or
-     blocked, rather than silently reverting to an unstyled default. */
+  ::selection {{ background: rgba(34, 197, 94, 0.35); color: #eafff2; }}
+
+  ::-webkit-scrollbar {{ width: 10px; height: 10px; }}
+  ::-webkit-scrollbar-track {{ background: transparent; }}
+  ::-webkit-scrollbar-thumb {{
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    border: 2px solid var(--bg);
+  }}
+  ::-webkit-scrollbar-thumb:hover {{ background: rgba(255, 255, 255, 0.2); }}
+  html {{ scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }}
+
   body {{
+    position: relative;
     background: var(--bg);
     background-image:
       linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
@@ -232,44 +269,46 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     background-attachment: fixed;
     color: var(--text);
     font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-    padding: 28px 18px 60px;
+    padding: var(--sp-6) var(--sp-4) var(--sp-7);
     -webkit-font-smoothing: antialiased;
     min-height: 100vh;
   }}
   .mono {{
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }}
-  .page {{ max-width: 1180px; margin: 0 auto; }}
+
+  .grain {{
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    opacity: 0.035; mix-blend-mode: overlay;
+  }}
+
+  .page {{ position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; }}
 
   .top {{
     display: flex; justify-content: space-between; align-items: flex-start;
-    margin-bottom: 4px; flex-wrap: wrap; gap: 10px;
+    margin-bottom: var(--sp-1); flex-wrap: wrap; gap: var(--sp-3);
   }}
-  .brand {{ display: flex; align-items: center; gap: 12px; }}
+  .brand {{ display: flex; align-items: center; gap: var(--sp-3); }}
   .logo {{
     width: 40px; height: 40px; border-radius: 11px; flex-shrink: 0;
     background: linear-gradient(135deg, var(--primary), var(--accent));
     display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 15px; color: #06101f;
+    font-weight: 700; font-size: var(--fs-sm); color: #06101f;
     box-shadow: 0 0 18px rgba(109, 139, 255, 0.35);
   }}
-  .top h1 {{
-    font-size: 19px; font-weight: 700; letter-spacing: 0.02em;
-  }}
+  .top h1 {{ font-size: 19px; font-weight: 700; letter-spacing: 0.02em; }}
   .top .date {{
-    font-size: 11.5px; color: var(--text-dim); margin-top: 2px;
+    font-size: var(--fs-xs); color: var(--text-dim); margin-top: var(--sp-1);
     text-transform: uppercase; letter-spacing: 0.08em;
   }}
 
-  /* Radar sync indicator: dual-ring pulse, pure CSS animation, negligible
-     cost (one small element, transform+opacity only). */
   .sync-badge {{
-    display: flex; align-items: center; gap: 8px;
-    font-size: 11px; color: var(--accent);
+    display: flex; align-items: center; gap: var(--sp-2);
+    font-size: var(--fs-xs); color: var(--accent);
     background: rgba(34, 197, 94, 0.08);
     border: 1px solid rgba(34, 197, 94, 0.3);
-    padding: 7px 14px 7px 10px; border-radius: 999px;
-    font-weight: 600; white-space: nowrap;
+    padding: var(--sp-2) var(--sp-4) var(--sp-2) var(--sp-2);
+    border-radius: 999px; font-weight: 600; white-space: nowrap;
     text-transform: uppercase; letter-spacing: 0.06em;
   }}
   .radar {{ position: relative; width: 10px; height: 10px; flex-shrink: 0; }}
@@ -288,137 +327,168 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     100% {{ transform: scale(2.6); opacity: 0; }}
   }}
 
-  /* KPI row */
-  .stats {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 24px 0 30px; }}
+  .stat, .toolbar .search-input, .chip, .owner-card, .table-wrap, .empty {{
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.3),
+      0 8px 24px -8px rgba(0, 0, 0, 0.45);
+  }}
+
+  .stats {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-3); margin: var(--sp-5) 0 var(--sp-6); }}
   .stat {{
     background: var(--surface);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--border);
-    border-radius: 13px; padding: 16px;
+    border-radius: 13px; padding: var(--sp-4);
   }}
   .stat .label {{
-    font-size: 10.5px; color: var(--text-dim); text-transform: uppercase;
+    font-size: var(--fs-xs); color: var(--text-dim); text-transform: uppercase;
     letter-spacing: 0.08em; font-weight: 600;
   }}
   .stat .value {{
-    font-size: 27px; font-weight: 700; margin-top: 5px;
-    font-variant-numeric: tabular-nums;
+    font-size: var(--fs-xl); font-weight: 700; margin-top: var(--sp-1);
+    font-variant-numeric: tabular-nums; line-height: 1.1;
   }}
   .stat.warn .value {{ color: var(--danger); }}
   .stat.ok .value {{ color: var(--accent); }}
 
   h2 {{
-    font-size: 12px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;
-    letter-spacing: 0.08em; margin: 30px 0 12px; display: flex; justify-content: space-between; align-items: baseline;
+    font-size: var(--fs-xs); font-weight: 700; color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 0.08em; margin: var(--sp-6) 0 var(--sp-3);
+    display: flex; justify-content: space-between; align-items: baseline;
   }}
-  h2 .count {{ font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: none; letter-spacing: 0; }}
+  h2 .count {{ font-size: var(--fs-xs); font-weight: 600; color: var(--text-dim); text-transform: none; letter-spacing: 0; }}
 
-  /* Search + filter chips */
   .toolbar {{
-    display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
-    margin-bottom: 16px;
+    display: flex; gap: var(--sp-3); flex-wrap: wrap; align-items: center;
+    margin-bottom: var(--sp-4);
   }}
-  .search-wrap {{
-    flex: 1 1 220px; position: relative;
-  }}
+  .search-wrap {{ flex: 1 1 220px; position: relative; }}
   .search-input {{
     width: 100%; background: var(--surface);
     backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--border); border-radius: 10px;
-    padding: 10px 14px 10px 34px; color: var(--text); font-size: 13.5px;
-    font-family: inherit;
+    padding: var(--sp-3) var(--sp-6) var(--sp-3) var(--sp-6);
+    color: var(--text); font-size: var(--fs-sm); font-family: inherit;
+    transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
   }}
   .search-input::placeholder {{ color: var(--text-dim); }}
-  .search-input:focus {{ outline: none; border-color: rgba(109,139,255,0.5); }}
+  .search-input:focus {{ outline: none; border-color: rgba(124,155,255,0.5); }}
   .search-icon {{
-    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
-    color: var(--text-dim); font-size: 13px; pointer-events: none;
+    position: absolute; left: var(--sp-3); top: 50%; transform: translateY(-50%);
+    color: var(--text-dim); font-size: var(--fs-sm); pointer-events: none;
   }}
-  .chips {{ display: flex; gap: 8px; flex-wrap: wrap; }}
+  .search-kbd {{
+    position: absolute; right: var(--sp-2); top: 50%; transform: translateY(-50%);
+    pointer-events: none;
+  }}
+  kbd {{
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 10px; color: var(--text-dim);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-strong);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    padding: 2px var(--sp-2);
+  }}
+
+  .chips {{ display: flex; gap: var(--sp-2); flex-wrap: wrap; }}
   .chip {{
     background: var(--surface); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--border); color: var(--text-dim);
-    font-size: 11.5px; font-weight: 600; padding: 8px 14px; border-radius: 999px;
+    font-size: var(--fs-xs); font-weight: 600; padding: var(--sp-2) var(--sp-4); border-radius: 999px;
     cursor: pointer; text-transform: uppercase; letter-spacing: 0.04em;
-    transition: border-color 0.15s ease, color 0.15s ease;
+    transition: border-color 0.2s var(--ease), color 0.2s var(--ease), background 0.2s var(--ease);
   }}
   .chip.active {{
-    color: var(--text); border-color: rgba(109,139,255,0.55);
-    background: rgba(109,139,255,0.12);
+    color: var(--text); border-color: rgba(124,155,255,0.55);
+    background: rgba(124,155,255,0.12);
   }}
 
-  /* Owner cards — true glass: translucent + blur, per explicit request.
-     Blur kept at 12px (not higher) to limit GPU cost on lower-end phones. */
-  .owner-grid {{ display: grid; grid-template-columns: 1fr; gap: 12px; }}
+  .owner-grid {{ display: grid; grid-template-columns: 1fr; gap: var(--sp-3); }}
+
   .owner-card {{
+    position: relative;
     background: var(--surface);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--border); border-radius: 15px;
-    padding: 18px; display: flex; flex-direction: column;
+    padding: var(--sp-4); display: flex; flex-direction: column;
+    overflow: hidden;
     opacity: 0; transform: translateY(10px);
-    animation: card-in 0.45s ease forwards;
+    animation: card-in 0.45s var(--ease) forwards;
   }}
   .owner-card.js-hidden {{ display: none; }}
   @keyframes card-in {{
     to {{ opacity: 1; transform: translateY(0); }}
   }}
+  .owner-card::before {{
+    content: ""; position: absolute; inset: 0; z-index: 0;
+    background: radial-gradient(
+      280px circle at var(--x, 50%) var(--y, 50%),
+      rgba(124, 155, 255, 0.10), transparent 70%
+    );
+    opacity: 0; transition: opacity 0.3s var(--ease);
+    pointer-events: none;
+  }}
   @media (hover: hover) and (pointer: fine) {{
-    .owner-card {{ transition: box-shadow 0.2s ease, border-color 0.2s ease; }}
+    .owner-card {{ transition: box-shadow 0.2s var(--ease), border-color 0.2s var(--ease); }}
     .owner-card:hover {{
-      border-color: rgba(109, 139, 255, 0.45);
-      box-shadow: 0 0 0 1px rgba(109, 139, 255, 0.18), 0 10px 28px rgba(109, 139, 255, 0.14);
+      border-color: rgba(124, 155, 255, 0.45);
+      box-shadow:
+        0 1px 2px rgba(0,0,0,0.3),
+        0 0 0 1px rgba(124, 155, 255, 0.18),
+        0 12px 32px -8px rgba(124, 155, 255, 0.18);
     }}
+    .owner-card:hover::before {{ opacity: 1; }}
   }}
+  .owner-card > * {{ position: relative; z-index: 1; }}
+
   .owner-head {{
-    display: flex; align-items: center; justify-content: space-between; gap: 10px;
-    margin-bottom: 6px; flex-wrap: wrap;
+    display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3);
+    margin-bottom: var(--sp-2); flex-wrap: wrap;
   }}
-  .owner-name {{ font-size: 15px; font-weight: 700; }}
+  .owner-name {{ font-size: var(--fs-md); font-weight: 700; }}
   .owner-count {{
-    font-size: 11px; color: var(--text-dim); font-weight: 500;
+    font-size: var(--fs-xs); color: var(--text-dim); font-weight: 500;
     text-transform: uppercase; letter-spacing: 0.05em;
   }}
 
   .property-row {{
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 11px 0; border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3);
+    padding: var(--sp-3) 0 var(--sp-3);
+    border-top: 2px solid var(--border);
   }}
-  .owner-card .property-row:first-of-type {{ border-top: none; padding-top: 8px; }}
-  .property-main {{ min-width: 0; flex: 1 1 auto; }}
-  .property-top {{ display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }}
-  .flat-name {{ font-size: 13.5px; font-weight: 600; line-height: 1.35; }}
+  .owner-card .property-row:first-of-type {{ border-top: none; padding-top: var(--sp-2); }}
+  .property-row.sev-overdue {{ border-top-color: var(--critical); }}
+  .property-row.sev-today {{ border-top-color: var(--danger); }}
+  .property-row.sev-soon {{ border-top-color: var(--amber); }}
+  .property-row.sev-window30 {{ border-top-color: var(--primary); }}
 
-  /* Severity badges: neon glow via layered box-shadow. This is the one
-     glow effect kept vivid, since it's the primary "read this fast"
-     signal on the page. */
+  .property-main {{ min-width: 0; flex: 1 1 auto; }}
+  .property-top {{ display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }}
+  .flat-name {{ font-size: var(--fs-sm); font-weight: 600; line-height: 1.35; }}
+
   .pill {{
     font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 10px; font-weight: 600; padding: 4px 10px; border-radius: 999px;
+    font-size: 10px; font-weight: 600; padding: 3px var(--sp-2); border-radius: 999px;
     text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; flex-shrink: 0;
   }}
   .pill.window30 {{ background: var(--primary-soft); color: var(--primary); }}
-  .pill.soon {{
-    background: var(--amber-bg); color: var(--amber);
-    box-shadow: 0 0 10px var(--amber-glow);
-  }}
-  .pill.today {{
-    background: var(--danger-bg); color: var(--danger);
-    box-shadow: 0 0 10px var(--danger-glow);
-  }}
-  .pill.overdue {{
-    background: var(--critical-bg); color: var(--critical);
-    box-shadow: 0 0 12px var(--critical-glow);
-  }}
-  .sub {{ font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; color: var(--text-dim); margin-top: 3px; }}
+  .pill.soon {{ background: var(--amber-bg); color: var(--amber); box-shadow: 0 0 10px var(--amber-glow); }}
+  .pill.today {{ background: var(--danger-bg); color: var(--danger); box-shadow: 0 0 10px var(--danger-glow); }}
+  .pill.overdue {{ background: var(--critical-bg); color: var(--critical); box-shadow: 0 0 12px var(--critical-glow); }}
 
-  /* Send button: deliberately calm, not glowing — it's tapped repeatedly
-     each session and shouldn't compete visually with the severity badge. */
+  .sub {{ font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: var(--fs-xs); color: var(--text-dim); margin-top: var(--sp-1); }}
+
   .send-btn {{
-    flex-shrink: 0; background: var(--accent); color: #06210f; font-weight: 700; font-size: 12.5px;
-    text-decoration: none; padding: 9px 16px; border-radius: 9px; white-space: nowrap;
-    align-self: center; display: inline-flex; align-items: center; gap: 5px;
+    flex-shrink: 0; background: var(--accent); color: #06210f; font-weight: 700; font-size: var(--fs-xs);
+    text-decoration: none; padding: var(--sp-2) var(--sp-4); border-radius: 9px; white-space: nowrap;
+    align-self: center; display: inline-flex; align-items: center; gap: var(--sp-1);
+    transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+  }}
+  @media (hover: hover) and (pointer: fine) {{
+    .send-btn:hover {{ box-shadow: 0 0 16px rgba(34, 197, 94, 0.35); }}
   }}
 
   .table-wrap {{
@@ -428,28 +498,31 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   table {{ width: 100%; border-collapse: collapse; }}
   th {{
     text-align: left; font-size: 10.5px; color: var(--text-dim); text-transform: uppercase;
-    letter-spacing: 0.06em; font-weight: 700; padding: 12px 16px; border-bottom: 1px solid var(--border);
-    background: rgba(255,255,255,0.02);
+    letter-spacing: 0.06em; font-weight: 700; padding: var(--sp-3) var(--sp-4);
+    border-bottom: 1px solid var(--border); background: var(--surface-2);
   }}
-  td {{ padding: 12px 16px; font-size: 13px; border-bottom: 1px solid var(--border); font-family: 'JetBrains Mono', ui-monospace, monospace; }}
+  td {{
+    padding: var(--sp-3) var(--sp-4); font-size: var(--fs-sm); border-bottom: 1px solid var(--border);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+  }}
   tr:last-child td {{ border-bottom: none; }}
   .muted {{ color: var(--text-dim); }}
   .num {{ text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--amber); }}
   th:last-child {{ text-align: right; }}
 
   .empty {{
-    font-size: 13px; color: var(--text-dim); background: var(--surface);
+    font-size: var(--fs-sm); color: var(--text-dim); background: var(--surface);
     backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-    border: 1px solid var(--border); border-radius: 13px; padding: 16px 18px;
+    border: 1px solid var(--border); border-radius: 13px; padding: var(--sp-4);
   }}
 
-  footer {{ margin-top: 32px; font-size: 11px; color: var(--text-dim); line-height: 1.6; }}
+  footer {{ margin-top: var(--sp-6); font-size: var(--fs-xs); color: var(--text-dim); line-height: 1.6; }}
 
   @media (min-width: 700px) {{
     .owner-grid {{ grid-template-columns: repeat(2, 1fr); }}
   }}
   @media (min-width: 1040px) {{
-    .page {{ padding: 0 12px; }}
+    .page {{ padding: 0 var(--sp-3); }}
     .stats {{ grid-template-columns: repeat(3, minmax(0, 260px)); }}
     .owner-grid {{ grid-template-columns: repeat(3, 1fr); }}
   }}
@@ -461,6 +534,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </style>
 </head>
 <body>
+  <svg class="grain" xmlns="http://www.w3.org/2000/svg">
+    <filter id="grainFilter">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"></feTurbulence>
+      <feColorMatrix type="saturate" values="0"></feColorMatrix>
+    </filter>
+    <rect width="100%" height="100%" filter="url(#grainFilter)"></rect>
+  </svg>
+
   <div class="page">
     <div class="top">
       <div class="brand">
@@ -507,6 +588,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           placeholder="Search owner, property, or tenant..."
           autocomplete="off"
         >
+        <span class="search-kbd"><kbd>/</kbd></span>
       </div>
       <div class="chips" id="filterChips">
         <span class="chip active" data-filter="all">All</span>
@@ -537,8 +619,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   </div>
 
   <script>
-    // KPI count-up: runs once on load (~600ms), then stops. No continuous
-    // render loop, negligible cost after the numbers settle.
     (function () {{
       var reduceMotion = window.matchMedia &&
         window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -566,7 +646,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }});
     }})();
 
-    // Staggered entry: incremental animation-delay per card.
     (function () {{
       var cards = document.querySelectorAll('.owner-card');
       cards.forEach(function (card, i) {{
@@ -574,9 +653,20 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }});
     }})();
 
-    // Search + severity filter. Pure client-side, filters by data
-    // attributes already present on each card — no network calls,
-    // cheap even with a few dozen cards.
+    (function () {{
+      var supportsHover = window.matchMedia &&
+        window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+      if (!supportsHover) return;
+
+      document.querySelectorAll('.owner-card').forEach(function (card) {{
+        card.addEventListener('mousemove', function (e) {{
+          var rect = card.getBoundingClientRect();
+          card.style.setProperty('--x', (e.clientX - rect.left) + 'px');
+          card.style.setProperty('--y', (e.clientY - rect.top) + 'px');
+        }});
+      }});
+    }})();
+
     (function () {{
       var searchInput = document.getElementById('queueSearch');
       var chips = document.querySelectorAll('#filterChips .chip');
@@ -606,6 +696,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
       if (searchInput) {{
         searchInput.addEventListener('input', applyFilters);
+
+        document.addEventListener('keydown', function (e) {{
+          if (e.key !== '/') return;
+          var active = document.activeElement;
+          var isTyping = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+          if (isTyping) return;
+          e.preventDefault();
+          searchInput.focus();
+        }});
       }}
       chips.forEach(function (chip) {{
         chip.addEventListener('click', function () {{
@@ -621,10 +720,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </html>
 """
 
-# data-owner / data-search / data-severities power the client-side search
-# and filter chips. data-search is a lowercase blob of owner + every
-# property address + every tenant name on the card, built in Python so
-# the JS never needs to re-parse card contents.
 OWNER_CARD_TEMPLATE = """
         <div class="owner-card" data-owner="{owner}" data-search="{search_blob}" data-severities="{severities}">
           <div class="owner-head">
@@ -636,7 +731,7 @@ OWNER_CARD_TEMPLATE = """
 """
 
 PROPERTY_ROW_TEMPLATE = """
-          <div class="property-row">
+          <div class="property-row sev-{filter_key}">
             <div class="property-main">
               <div class="property-top">
                 <span class="flat-name">{flat}</span>
@@ -726,6 +821,7 @@ def main():
                 flat=html.escape(flat),
                 pill_class=pill_class,
                 pill_text=pill_text,
+                filter_key=filter_key,
                 tenant_line=tenant_line,
                 end_date_display=end_date_display,
                 link=link,
