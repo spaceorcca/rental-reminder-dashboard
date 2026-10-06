@@ -20,8 +20,7 @@ Action window (continuous, never exact-day matching):
     -15 <= days_left <= 30 -> Action Queue, always visible
         15..30 -> "30-Day Window"     1..14 -> "Expiring Soon"
         0      -> "Expires Today"     -15..-1 -> "Overdue (Nd)"
-    31..60                -> "Upcoming Renewals" table
-    -60..-16              -> counted in a "lapsed" notice (call directly)
+    31..60                -> "Upcoming Renewals" grid
 
 Sheet columns (header matching ignores case, spaces and colons):
     Owner Name | Tenant Name | Flat Address | Phone Number | End Date
@@ -61,7 +60,6 @@ ACTIVE_WINDOW_MIN_DAYS = -15
 ACTIVE_WINDOW_MAX_DAYS = 30
 UPCOMING_WINDOW_DAYS = 60
 UPCOMING_PREVIEW_LIMIT = 10
-LAPSED_LOOKBACK_DAYS = 60       # only recent lapses count toward the notice
 STALE_AFTER_HOURS = 36          # dashboard warns if older than this
 
 CONTACT_NAME = "Talib"
@@ -275,9 +273,8 @@ def demo_agreements(today: date, empty: bool = False) -> "list[Agreement]":
            "Flat 1203, Tower C, Emerald Towers Phase 2, Near Symbiosis Road, Viman Nagar, Pune 411014",
            "9000000004", 25),
         mk("Rahul Bhosale", "Meera Nair", "Row House 7, Palm Grove, Hinjewadi, Pune", "12345", 6),
-        mk("Kavita Patil", "Sameer Khan", "D-15, Riverside Apartments, Aundh, Pune", "9000000005", -30),
         mk("Sandeep More", "Tara Menon", "F-3, Sunrise Court, Kalyani Nagar, Pune", "9000000006", 35),
-        mk("Anjali Gupta", "Dev Malhotra", "Villa 9, Orchid Enclave, Bavdhan, Pune", "9000000007", 48),
+        mk("Anjali Gupta", "Dev Malhotra", "Villa 9, Orchid Enclave, Bavdhan, Pune", "9000000007", 41),
         mk("Rohit Jadhav", "Pooja Kapoor", "A-8, Maple Court, Pashan, Pune", "9000000008", 58),
     ]
 
@@ -286,21 +283,20 @@ def demo_agreements(today: date, empty: bool = False) -> "list[Agreement]":
 # HTML fragments
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _svg(inner: str, size: int = 16, extra: str = "") -> str:
+def _svg(inner: str, size: int = 16) -> str:
     return (f'<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none" '
             f'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
-            f'stroke-linejoin="round" aria-hidden="true" {extra}>{inner}</svg>')
+            f'stroke-linejoin="round" aria-hidden="true">{inner}</svg>')
 
 
 ICON_BOLT = _svg('<path d="M13 2 3 14h9l-1 8 10-12h-9z"/>', 18)
 ICON_ALERT = _svg('<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>'
                   '<path d="M12 9v4M12 17h.01"/>', 18)
-ICON_SENT = _svg('<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/>', 18)
 ICON_CAL = _svg('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>', 18)
 ICON_COPY = _svg('<rect x="9" y="9" width="13" height="13" rx="2"/>'
                  '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>', 16)
-ICON_CHECK = _svg('<path d="M20 6 9 17l-5-5"/>', 16)
 ICON_SEARCH = _svg('<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>', 15)
+ICON_CLOSE = _svg('<path d="M18 6 6 18M6 6l12 12"/>', 14)
 ICON_WA = ('<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
            '<path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297'
            '-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48'
@@ -342,18 +338,16 @@ def render_row(a: Agreement) -> str:
 
     if a.phone:
         action = (f'<a class="send-btn" href="{esc(wa_link(a.phone, message))}" target="_blank" '
-                  f'rel="noopener noreferrer">{ICON_WA}<span class="send-label">Send WhatsApp</span></a>')
+                  f'rel="noopener noreferrer">{ICON_WA}Send WhatsApp</a>')
     else:
         action = ('<span class="send-btn disabled" role="note">'
                   'No valid number \u2013 fix in sheet</span>')
 
     tenant_line = f'<div class="tenant">Tenant: {esc(a.tenant)}</div>' if a.tenant else ""
-    key = f"{a.owner}|{a.flat}|{a.end_date.isoformat()}|{tier}"
     blob = f"{owner_disp} {a.flat} {a.tenant}".lower()
 
     return (
-        f'<div class="property-row" data-sev="{tier}" data-key="{esc(key)}" '
-        f'data-search="{esc(blob)}" data-msg="{esc(message)}">'
+        f'<div class="property-row" data-sev="{tier}" data-search="{esc(blob)}" data-msg="{esc(message)}">'
         f'<div class="row-top">'
         f'<div class="row-main"><div class="flat-name">{esc(a.flat) or "No address"}</div>{tenant_line}</div>'
         f'<div class="days"><span class="days-num">{days_txt}</span>'
@@ -362,10 +356,7 @@ def render_row(a: Agreement) -> str:
         f'<span class="end-date">Ends {end_disp}</span></div>'
         f'<div class="row-actions">'
         f'<button type="button" class="icon-btn copy-btn" aria-label="Copy message" '
-        f'title="Copy message">{ICON_COPY}</button>'
-        f'<button type="button" class="icon-btn mark-btn" aria-pressed="false" '
-        f'aria-label="Mark as sent" title="Mark as sent">{ICON_CHECK}</button>'
-        f'{action}</div></div>'
+        f'title="Copy WhatsApp message">{ICON_COPY}</button>{action}</div></div>'
     )
 
 
@@ -385,17 +376,23 @@ def render_card(owner: str, rows: "list[Agreement]", idx: int) -> str:
 
 
 def render_upcoming_row(a: Agreement) -> str:
+    span = UPCOMING_WINDOW_DAYS - ACTIVE_WINDOW_MAX_DAYS
+    pct = max(0.0, min(100.0, (UPCOMING_WINDOW_DAYS - a.days_left) / span * 100))
     return (
-        f'<tr><td class="cell-flat">{esc(a.flat)}</td>'
-        f'<td class="muted">{esc(a.owner or "Unnamed owner")}</td>'
-        f'<td class="muted nowrap">{a.end_date.strftime("%d %b %Y")}</td>'
-        f'<td class="num"><span class="days-pill">{a.days_left}d</span></td></tr>'
+        f'<tr><td class="cell-main"><div class="cell-flat">{esc(a.flat)}</div>'
+        f'<div class="cell-owner">{esc(a.owner or "Unnamed owner")}</div></td>'
+        f'<td class="cell-date">{a.end_date.strftime("%d %b %Y")}</td>'
+        f'<td class="cell-count"><div class="countdown">'
+        f'<div class="meter" aria-hidden="true"><i style="width:{pct:.0f}%"></i></div>'
+        f'<span class="count-num">{a.days_left}d</span></div></td></tr>'
     )
 
 
-def render_kpi(icon: str, label: str, value: str, sub: str, cls: str = "") -> str:
+def render_kpi(icon: str, label: str, value: int, sub: str, cls: str = "") -> str:
     return (f'<div class="stat {cls}"><span class="stat-icon">{icon}</span>'
-            f'<div class="label">{label}</div>{value}<div class="stat-sub">{sub}</div></div>')
+            f'<div class="label">{label}</div>'
+            f'<div class="value" data-countup="{value}">0</div>'
+            f'<div class="stat-sub">{sub}</div></div>')
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -425,7 +422,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     --text:#edf0f5; --text-dim:#9aa5b8;
     --accent:#22c55e; --accent-glow:#00f090;
     --primary:#7c9bff; --danger:#ff6b85; --amber:#ffc14d; --critical:#ff5577;
-    --shadow:0 1px 2px rgba(0,0,0,0.30), 0 8px 24px -8px rgba(0,0,0,0.45);
+    --shadow:inset 0 1px 0 rgba(255,255,255,0.06), 0 1px 2px rgba(0,0,0,0.30), 0 8px 24px -8px rgba(0,0,0,0.45);
     --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
     --sans:'Space Grotesk',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   }
@@ -443,7 +440,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     font-size:var(--fs-sm); line-height:1.5; min-height:100vh; min-height:100dvh;
     padding:var(--sp-6) var(--sp-4) var(--sp-7); -webkit-font-smoothing:antialiased;
   }
-  /* Grid + glow live on a fixed pseudo-element (cheaper than background-attachment:fixed) */
+  /* Grid + glow live on fixed pseudo-elements (cheaper than background-attachment:fixed) */
   body::before {
     content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
     background-image:
@@ -452,8 +449,13 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
       radial-gradient(ellipse 900px 400px at 50% -10%, rgba(109,139,255,0.10), transparent 60%);
     background-size:42px 42px, 42px 42px, 100% 100%;
   }
+  body::after {
+    content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
+    background:radial-gradient(620px 420px at 6% 104%, rgba(34,197,94,0.075), transparent 62%),
+               radial-gradient(520px 400px at 100% 18%, rgba(99,102,241,0.09), transparent 62%);
+  }
   .accent-bar { position:fixed; top:0; left:0; right:0; height:2px; z-index:999;
-    background:linear-gradient(90deg,#00f5ff,#22c55e 40%,#a855f7); }
+    background:linear-gradient(90deg,#00f5ff 0%,#22c55e 38%,#a855f7 70%,#ff6b85 100%); }
   .grain { position:fixed; inset:0; width:100%; height:100%; z-index:0; pointer-events:none;
     opacity:0.035; mix-blend-mode:overlay; }
   @media (max-width:700px) { .grain { display:none; } }
@@ -462,13 +464,12 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   a, button { -webkit-tap-highlight-color:transparent; }
   :focus-visible { outline:2px solid var(--primary); outline-offset:2px; border-radius:6px; }
 
-  .glass { background:var(--surface); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
-    border:1px solid var(--border); box-shadow:var(--shadow); }
-
   /* Banners */
   .banner { display:flex; align-items:center; gap:var(--sp-3); border-radius:10px;
     padding:var(--sp-3) var(--sp-4); font-size:var(--fs-sm); margin-bottom:var(--sp-4); }
-  .banner.warn { background:rgba(255,193,77,0.09); border:1px solid rgba(255,193,77,0.30); color:var(--amber); }
+  .banner button { margin-left:auto; flex-shrink:0; display:grid; place-items:center; width:28px; height:28px;
+    border-radius:50%; background:rgba(255,255,255,0.08); border:1px solid transparent; color:inherit; cursor:pointer; }
+  .banner button:hover { background:rgba(255,255,255,0.16); border-color:var(--border-hi); }
   .banner.stale { background:rgba(255,85,119,0.10); border:1px solid rgba(255,85,119,0.40); color:var(--critical); font-weight:600; }
   .banner.demo { background:rgba(124,155,255,0.10); border:1px solid rgba(124,155,255,0.35); color:var(--primary); }
 
@@ -484,36 +485,39 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .sync-badge { display:inline-flex; align-items:center; gap:var(--sp-2); font-family:var(--mono);
     font-size:var(--fs-xs); color:var(--accent); background:rgba(34,197,94,0.08);
     border:1px solid rgba(34,197,94,0.28); padding:6px var(--sp-4) 6px var(--sp-3); border-radius:999px; }
-  .sync-dot { width:7px; height:7px; border-radius:50%; background:var(--accent);
-    box-shadow:0 0 8px var(--accent-glow); }
+  .sync-dot { width:7px; height:7px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px var(--accent-glow); }
 
-  /* KPI cards */
-  .stats { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--sp-3); margin-bottom:var(--sp-4); }
-  @media (min-width:900px) { .stats { grid-template-columns:repeat(4,minmax(0,1fr)); } }
-  .stat { position:relative; border-radius:13px; padding:var(--sp-4) var(--sp-4) var(--sp-4) var(--sp-5);
-    min-height:110px; display:flex; flex-direction:column; justify-content:flex-end;
+  /* KPI cards: three evenly spaced columns */
+  .stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--sp-3); margin-bottom:var(--sp-4); }
+  .stat { position:relative; overflow:hidden; border-radius:14px; padding:var(--sp-4) var(--sp-4) var(--sp-4) var(--sp-5);
+    min-height:112px; display:flex; flex-direction:column; justify-content:flex-end;
     background:var(--surface); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
-    border:1px solid var(--border); box-shadow:var(--shadow); transition:border-color .2s var(--ease); }
-  .stat:hover { border-color:var(--border-hi); }
-  .stat-icon { position:absolute; top:var(--sp-4); right:var(--sp-4); color:var(--text-dim); opacity:0.7; }
+    border:1px solid var(--border); box-shadow:var(--shadow); }
+  .stat::after { content:""; position:absolute; inset:0; pointer-events:none;
+    background:radial-gradient(ellipse 90% 70% at 0% 110%, var(--tint, rgba(124,155,255,0.06)), transparent 60%); }
+  .stat > * { position:relative; z-index:1; }
+  .stat.warn { --tint:rgba(255,77,109,0.09); border-left:3px solid var(--danger); }
+  .stat.crit { --tint:rgba(255,45,85,0.10); border-left:3px solid var(--critical); }
+  .stat.ok { --tint:rgba(34,197,94,0.08); border-left:3px solid var(--accent); }
+  .stat-icon { position:absolute; top:var(--sp-4); right:var(--sp-4); z-index:1; color:var(--text-dim); opacity:0.7; }
   .stat .label { font-size:var(--fs-sm); color:var(--text-dim); font-weight:500; }
   .stat .value { font-family:var(--mono); font-size:var(--fs-xl); font-weight:600; line-height:1.15;
     letter-spacing:-0.03em; font-variant-numeric:tabular-nums; margin-top:var(--sp-1); }
   .stat-sub { font-size:var(--fs-xs); color:var(--text-dim); margin-top:2px; }
-  .stat.warn { border-left:3px solid var(--danger); }
   .stat.warn .value { color:var(--danger); text-shadow:0 0 20px rgba(255,77,109,0.50); }
-  .stat.ok { border-left:3px solid var(--accent); }
-  .stat.ok .value { color:var(--accent); text-shadow:0 0 20px rgba(34,197,94,0.40); }
-  .stat.crit { border-left:3px solid var(--critical); }
   .stat.crit .value { color:var(--critical); text-shadow:0 0 20px rgba(255,45,85,0.50); }
+  .stat.ok .value { color:var(--accent); text-shadow:0 0 20px rgba(34,197,94,0.40); }
 
   /* Urgency bar: the queue's shape at a glance */
-  .sevbar { display:flex; gap:3px; height:8px; margin-bottom:var(--sp-5); }
-  .sevbar span { border-radius:999px; min-width:8px; }
-  .sevbar .overdue { background:var(--critical); box-shadow:0 0 12px rgba(255,45,85,0.55); }
-  .sevbar .today { background:var(--danger); box-shadow:0 0 12px rgba(255,77,109,0.5); }
-  .sevbar .soon { background:var(--amber); box-shadow:0 0 12px rgba(255,176,32,0.45); }
-  .sevbar .window30 { background:var(--primary); opacity:0.75; }
+  .sevbar { display:flex; gap:3px; height:6px; margin-bottom:var(--sp-5); }
+  .sevbar span { flex-basis:0; min-width:8px; border-radius:999px; animation:sweep .6s var(--ease) both; }
+  .sevbar span:nth-child(2) { animation-delay:60ms; } .sevbar span:nth-child(3) { animation-delay:120ms; }
+  .sevbar span:nth-child(4) { animation-delay:180ms; }
+  @keyframes sweep { from { opacity:0; transform:scaleX(0); transform-origin:left; } }
+  .sevbar .overdue { background:var(--critical); box-shadow:0 0 10px rgba(255,45,85,0.55); }
+  .sevbar .today { background:var(--danger); box-shadow:0 0 10px rgba(255,77,109,0.50); }
+  .sevbar .soon { background:var(--amber); box-shadow:0 0 10px rgba(255,176,32,0.45); }
+  .sevbar .window30 { background:var(--primary); opacity:0.7; }
 
   /* Section headings */
   h2 { font-size:var(--fs-md); font-weight:600; letter-spacing:-0.01em; margin:var(--sp-6) 0 var(--sp-3);
@@ -526,7 +530,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     background:linear-gradient(180deg,var(--bg) 75%,transparent); }
   .toolbar { display:flex; gap:var(--sp-3); flex-wrap:wrap; align-items:center; }
   .search-wrap { flex:1 1 240px; position:relative; }
-  .search-input { width:100%; height:44px; padding:0 44px 0 40px; color:var(--text); font-family:var(--sans);
+  input[type="search"]::-webkit-search-cancel-button,
+  input[type="search"]::-webkit-search-decoration { -webkit-appearance:none; appearance:none; }
+  .search-input { width:100%; height:44px; padding:0 72px 0 40px; color:var(--text); font-family:var(--sans);
     font-size:var(--fs-sm); background:var(--surface); border:1px solid var(--border); border-radius:10px;
     box-shadow:var(--shadow); transition:border-color .2s var(--ease), box-shadow .2s var(--ease); }
   .search-input::placeholder { color:var(--text-dim); }
@@ -534,6 +540,10 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     box-shadow:0 0 0 3px rgba(124,155,255,0.12), 0 0 20px rgba(124,155,255,0.08); }
   .search-icon { position:absolute; left:13px; top:50%; transform:translateY(-50%); color:var(--text-dim);
     pointer-events:none; display:flex; }
+  .search-clear { position:absolute; right:40px; top:50%; transform:translateY(-50%); width:24px; height:24px;
+    display:grid; place-items:center; border-radius:50%; background:rgba(255,255,255,0.08);
+    border:1px solid var(--border); color:var(--text-dim); cursor:pointer; }
+  .search-clear:hover { color:var(--text); border-color:var(--border-hi); }
   .search-kbd { position:absolute; right:var(--sp-2); top:50%; transform:translateY(-50%); pointer-events:none; }
   kbd { font-family:var(--mono); font-size:10px; color:var(--text-dim); background:rgba(255,255,255,0.06);
     border:1px solid var(--border-hi); border-bottom-width:2px; border-radius:5px; padding:2px var(--sp-2); }
@@ -541,24 +551,26 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .chips { display:flex; gap:var(--sp-2); flex-wrap:wrap; }
   .chip { display:inline-flex; align-items:center; gap:6px; min-height:36px; padding:0 var(--sp-4);
     font-family:var(--sans); font-size:var(--fs-sm); font-weight:500; color:var(--text-dim); cursor:pointer;
-    background:var(--surface); border:1px solid var(--border); border-radius:999px;
-    transition:all .2s var(--ease); }
+    background:var(--surface); border:1px solid var(--border); border-radius:999px; transition:all .2s var(--ease); }
   .chip .n { font-family:var(--mono); font-size:var(--fs-xs); color:var(--text-dim); }
-  .chip:hover { border-color:var(--border-hi); color:var(--text); }
+  @media (hover:hover) and (pointer:fine) { .chip:hover { border-color:var(--border-hi); color:var(--text); } }
   .chip[aria-pressed="true"] { color:var(--text); border-color:rgba(124,155,255,0.65);
     background:rgba(124,155,255,0.14); box-shadow:0 0 12px rgba(124,155,255,0.25); }
+  .chip[data-filter="overdue"][aria-pressed="true"] { color:var(--critical); border-color:rgba(255,45,85,0.55); background:rgba(255,45,85,0.12); box-shadow:0 0 12px rgba(255,45,85,0.22); }
+  .chip[data-filter="today"][aria-pressed="true"] { color:var(--danger); border-color:rgba(255,77,109,0.55); background:rgba(255,77,109,0.12); box-shadow:0 0 12px rgba(255,77,109,0.22); }
+  .chip[data-filter="soon"][aria-pressed="true"] { color:var(--amber); border-color:rgba(255,176,32,0.55); background:rgba(255,176,32,0.12); box-shadow:0 0 12px rgba(255,176,32,0.22); }
 
   /* Owner cards */
   .owner-grid { display:grid; gap:var(--sp-3); align-items:start;
     grid-template-columns:repeat(auto-fill,minmax(min(100%,420px),1fr)); }
-  .owner-card { position:relative; overflow:hidden; border-radius:15px; padding:var(--sp-4);
+  .owner-card { position:relative; overflow:hidden; border-radius:16px; padding:var(--sp-4);
     background:var(--surface); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
     border:1px solid var(--border); box-shadow:var(--shadow);
     animation:card-in .45s var(--ease) both; animation-delay:calc(var(--i,0) * 60ms); }
   @keyframes card-in { from { opacity:0; transform:translateY(12px) scale(0.98); } }
-  .owner-card[data-worst="overdue"] { box-shadow:0 0 0 1px rgba(255,45,85,0.14), 0 8px 32px rgba(255,45,85,0.09), var(--shadow); }
-  .owner-card[data-worst="today"] { box-shadow:0 0 0 1px rgba(255,77,109,0.14), 0 8px 32px rgba(255,77,109,0.09), var(--shadow); }
-  .owner-card[data-worst="soon"] { box-shadow:0 0 0 1px rgba(255,176,32,0.12), 0 8px 32px rgba(255,176,32,0.06), var(--shadow); }
+  .owner-card[data-worst="overdue"] { box-shadow:var(--shadow), 0 0 0 1px rgba(255,45,85,0.14), 0 8px 32px rgba(255,45,85,0.10); }
+  .owner-card[data-worst="today"] { box-shadow:var(--shadow), 0 0 0 1px rgba(255,77,109,0.14), 0 8px 32px rgba(255,77,109,0.10); }
+  .owner-card[data-worst="soon"] { box-shadow:var(--shadow), 0 0 0 1px rgba(255,176,32,0.12), 0 8px 32px rgba(255,176,32,0.07); }
   .owner-card::before { content:""; position:absolute; inset:0; pointer-events:none; opacity:0;
     background:radial-gradient(260px circle at var(--mx,50%) var(--my,50%), rgba(124,155,255,0.09), transparent 70%);
     transition:opacity .3s var(--ease); }
@@ -571,27 +583,29 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .owner-head { display:flex; align-items:center; gap:var(--sp-3); margin-bottom:var(--sp-3); }
   .owner-avatar { width:34px; height:34px; min-width:34px; border-radius:50%; display:grid; place-items:center;
     background:linear-gradient(135deg,#6366f1,#22c55e); color:#fff; font-weight:700; font-size:var(--fs-sm); }
+  .owner-card[data-worst="overdue"] .owner-avatar { background:linear-gradient(135deg,#ff5577,#c91c45); }
+  .owner-card[data-worst="today"] .owner-avatar { background:linear-gradient(135deg,#ff6b85,#d63063); }
+  .owner-card[data-worst="soon"] .owner-avatar { background:linear-gradient(135deg,#ffc14d,#c87900); color:#2b1a00; }
   .owner-name { flex:1; min-width:0; font-size:var(--fs-md); font-weight:600; overflow-wrap:anywhere; }
   .owner-count { font-size:var(--fs-xs); color:var(--text-dim); background:var(--surface-2);
     border:1px solid var(--border); border-radius:999px; padding:2px 10px; white-space:nowrap; }
   .rows { display:flex; flex-direction:column; gap:var(--sp-2); }
 
-  /* Property rows: severity accent on each row's top edge */
+  /* Property rows: borderless, faint translucent fill, crisp 3px severity line on the left edge */
   .property-row { --sev:var(--primary); display:flex; flex-direction:column; gap:var(--sp-3);
-    padding:var(--sp-3) var(--sp-4) var(--sp-4); border-radius:11px; background:rgba(255,255,255,0.025);
-    border:1px solid var(--border); border-top:2px solid var(--sev);
-    transition:opacity .2s var(--ease), background .15s var(--ease); }
+    position:relative; overflow:hidden; padding:var(--sp-3) var(--sp-4) var(--sp-4) 20px; border-radius:11px;
+    background:rgba(255,255,255,0.03); transition:background .15s var(--ease); }
+  .property-row::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--sev); }
   .property-row[data-sev="overdue"] { --sev:var(--critical); }
   .property-row[data-sev="today"] { --sev:var(--danger); }
   .property-row[data-sev="soon"] { --sev:var(--amber); }
-  .property-row:hover { background:rgba(255,255,255,0.04); }
+  @media (hover:hover) and (pointer:fine) { .property-row:hover { background:rgba(255,255,255,0.05); } }
   .row-top { display:flex; justify-content:space-between; align-items:flex-start; gap:var(--sp-3); }
   .row-main { min-width:0; }
   .flat-name { font-size:var(--fs-sm); font-weight:600; line-height:1.4; overflow-wrap:anywhere; }
   .tenant { font-size:var(--fs-xs); color:var(--text-dim); margin-top:2px; }
   .days { text-align:right; flex-shrink:0; line-height:1; }
-  .days-num { font-family:var(--mono); font-size:var(--fs-lg); font-weight:600; color:var(--sev);
-    letter-spacing:-0.03em; }
+  .days-num { font-family:var(--mono); font-size:var(--fs-lg); font-weight:600; color:var(--sev); letter-spacing:-0.03em; }
   .property-row:not([data-sev="window30"]) .days-num { text-shadow:0 0 18px color-mix(in srgb, var(--sev) 55%, transparent); }
   .days small { display:block; font-size:var(--fs-xs); color:var(--text-dim); margin-top:3px; }
   .row-meta { display:flex; align-items:center; gap:var(--sp-3); flex-wrap:wrap; }
@@ -600,55 +614,57 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .pill { font-family:var(--mono); font-size:var(--fs-xs); font-weight:500; padding:3px 10px;
     border-radius:999px; white-space:nowrap; }
   .pill.window30 { background:rgba(124,155,255,0.12); color:var(--primary); border:1px solid rgba(124,155,255,0.25); }
-  .pill.soon { background:rgba(255,176,32,0.11); color:var(--amber); border:1px solid rgba(255,176,32,0.30);
-    box-shadow:0 0 10px rgba(255,176,32,0.25); }
-  .pill.today { background:rgba(255,77,109,0.11); color:var(--danger); border:1px solid rgba(255,77,109,0.35);
-    box-shadow:0 0 10px rgba(255,77,109,0.30); }
-  .pill.overdue { background:rgba(255,45,85,0.14); color:var(--critical); border:1px solid rgba(255,45,85,0.40);
-    box-shadow:0 0 12px rgba(255,45,85,0.35); }
+  .pill.soon { background:rgba(255,176,32,0.11); color:var(--amber); border:1px solid rgba(255,176,32,0.30); box-shadow:0 0 10px rgba(255,176,32,0.25); }
+  .pill.today { background:rgba(255,77,109,0.11); color:var(--danger); border:1px solid rgba(255,77,109,0.35); box-shadow:0 0 10px rgba(255,77,109,0.30); }
+  .pill.overdue { background:rgba(255,45,85,0.14); color:var(--critical); border:1px solid rgba(255,45,85,0.40); box-shadow:0 0 12px rgba(255,45,85,0.35); }
 
-  /* Actions: comfortable tap targets on phones */
+  /* Actions: quiet copy button + ghost WhatsApp button that fills on hover or press */
   .row-actions { display:flex; gap:var(--sp-2); align-items:stretch; }
   .icon-btn { width:44px; min-height:44px; display:grid; place-items:center; cursor:pointer; color:var(--text-dim);
-    background:var(--surface-2); border:1px solid var(--border); border-radius:9px;
-    transition:all .15s var(--ease); }
-  .icon-btn:hover { color:var(--text); border-color:var(--border-hi); }
-  .icon-btn.mark-btn[aria-pressed="true"] { color:#06210f; background:var(--accent); border-color:var(--accent); }
-  .send-btn { flex:1; min-height:44px; display:inline-flex; align-items:center; justify-content:center; gap:6px;
-    padding:0 var(--sp-4); border-radius:9px; background:var(--accent); color:#06210f; font-weight:700;
-    font-size:var(--fs-sm); text-decoration:none; white-space:nowrap; letter-spacing:0.01em;
-    transition:transform .15s var(--ease), box-shadow .15s var(--ease); }
+    background:transparent; border:1px solid var(--border); border-radius:9px; transition:all .15s var(--ease); }
+  .icon-btn:hover { color:var(--text); border-color:var(--border-hi); background:rgba(255,255,255,0.04); }
+  .send-btn { flex:1; min-height:44px; display:inline-flex; align-items:center; justify-content:center; gap:7px;
+    padding:0 var(--sp-4); border-radius:9px; background:rgba(34,197,94,0.06); color:var(--accent);
+    border:1px solid rgba(34,197,94,0.35); font-weight:600; font-size:var(--fs-sm); text-decoration:none;
+    white-space:nowrap; letter-spacing:0.01em;
+    transition:background .18s var(--ease), color .18s var(--ease), border-color .18s var(--ease), box-shadow .18s var(--ease), transform .15s var(--ease); }
+  .send-btn:not(.disabled):active, .send-btn:not(.disabled):focus-visible { background:var(--accent); color:#04150b; border-color:var(--accent); }
+  .send-btn:not(.disabled):active { transform:scale(0.985); }
   .send-btn.disabled { background:transparent; color:var(--critical); border:1px dashed rgba(255,85,119,0.55);
     font-weight:500; font-size:var(--fs-xs); white-space:normal; text-align:center; line-height:1.3; }
   @media (hover:hover) and (pointer:fine) {
     .icon-btn, .send-btn { min-height:38px; }
-    .send-btn:not(.disabled):hover { transform:translateY(-1px); box-shadow:0 4px 20px rgba(34,197,94,0.45); }
-    .send-btn:not(.disabled):active { transform:none; box-shadow:none; }
+    .icon-btn { width:38px; }
+    .send-btn:not(.disabled):hover { background:var(--accent); color:#04150b; border-color:var(--accent);
+      box-shadow:0 6px 22px rgba(34,197,94,0.40); }
   }
-  .property-row.is-sent { opacity:0.55; }
-  .property-row.is-sent .send-btn:not(.disabled) { background:transparent; color:var(--accent);
-    border:1px solid rgba(34,197,94,0.45); }
 
-  /* Upcoming table */
-  .table-wrap { border-radius:13px; overflow-x:auto; background:var(--surface);
+  /* Upcoming renewals: data grid */
+  .table-wrap { border-radius:16px; overflow-x:auto; background:var(--surface);
     backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
     border:1px solid var(--border); box-shadow:var(--shadow); }
-  table { width:100%; min-width:520px; border-collapse:collapse; }
-  th { text-align:left; font-size:var(--fs-xs); font-weight:600; color:var(--text-dim);
-    padding:var(--sp-3) var(--sp-4); background:var(--surface-2); border-bottom:1px solid var(--border); }
-  th:last-child, td.num { text-align:right; }
-  td { padding:var(--sp-3) var(--sp-4); font-size:var(--fs-sm); border-bottom:1px solid var(--border);
-    transition:background .12s; }
-  .cell-flat { min-width:220px; }
-  tr:last-child td { border-bottom:none; }
-  tbody tr:hover td { background:rgba(124,155,255,0.05); }
-  .muted { color:var(--text-dim); }
-  .nowrap { white-space:nowrap; font-family:var(--mono); font-size:var(--fs-xs); }
-  .days-pill { font-family:var(--mono); font-weight:600; font-size:var(--fs-xs); color:var(--amber);
-    background:rgba(255,193,77,0.12); padding:3px 10px; border-radius:999px; }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; font-size:var(--fs-xs); font-weight:500; color:var(--text-dim);
+    padding:var(--sp-3) var(--sp-5); border-bottom:1px solid var(--border); background:rgba(255,255,255,0.02); }
+  th:last-child { text-align:right; }
+  td { padding:14px var(--sp-5); vertical-align:middle; border-bottom:1px solid rgba(255,255,255,0.05); }
+  tbody tr:last-child td { border-bottom:none; }
+  tbody tr { transition:background .15s var(--ease); }
+  tbody tr:hover { background:rgba(124,155,255,0.05); }
+  tbody tr:hover td:first-child { box-shadow:inset 3px 0 0 var(--primary); }
+  .cell-flat { font-size:var(--fs-sm); font-weight:600; line-height:1.4; }
+  .cell-owner { font-size:var(--fs-xs); color:var(--text-dim); margin-top:2px; }
+  .cell-date { font-family:var(--mono); font-size:var(--fs-xs); color:var(--text-dim); white-space:nowrap; }
+  .cell-count { width:200px; }
+  .countdown { display:flex; align-items:center; gap:var(--sp-3); }
+  .meter { flex:1; min-width:56px; height:4px; border-radius:999px; background:rgba(255,255,255,0.07); overflow:hidden; }
+  .meter i { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,var(--primary),#b4c3ff); }
+  .count-num { font-family:var(--mono); font-size:var(--fs-sm); font-weight:600; min-width:34px; text-align:right;
+    font-variant-numeric:tabular-nums; }
+  .grid-note { color:var(--text-dim); font-size:var(--fs-sm); }
 
   .empty { text-align:center; padding:var(--sp-7) var(--sp-5); font-size:var(--fs-sm); color:var(--text-dim);
-    border-radius:13px; background:var(--surface); border:1px solid var(--border); }
+    border-radius:14px; background:var(--surface); border:1px solid var(--border); }
   .empty strong { display:block; color:var(--text); font-size:var(--fs-md); margin-bottom:var(--sp-1); }
 
   footer { margin-top:var(--sp-6); padding-top:var(--sp-5); border-top:1px solid var(--border);
@@ -656,16 +672,27 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
   .toast { position:fixed; left:50%; bottom:calc(var(--sp-5) + env(safe-area-inset-bottom, 0px));
     transform:translate(-50%,16px); opacity:0; pointer-events:none; z-index:1000;
-    background:#101522; border:1px solid var(--border-hi); color:var(--text); border-radius:999px;
-    padding:var(--sp-2) var(--sp-5); font-size:var(--fs-sm); box-shadow:0 8px 32px rgba(0,0,0,0.5);
+    background:#101522; border:1px solid var(--border-hi); color:var(--text); border-radius:18px;
+    padding:var(--sp-2) var(--sp-5); font-size:var(--fs-sm); font-weight:500; text-align:center;
+    max-width:calc(100vw - 32px); box-shadow:0 8px 32px rgba(0,0,0,0.5);
     transition:opacity .25s var(--ease), transform .25s var(--ease); }
   .toast.show { opacity:1; transform:translate(-50%,0); }
+  .toast.success { border-color:rgba(34,197,94,0.55); color:var(--accent); }
+  .toast.error { border-color:rgba(255,77,109,0.45); color:var(--danger); }
 
-  @media (max-width:520px) {
+  @media (max-width:560px) {
     body { padding-left:var(--sp-3); padding-right:var(--sp-3); }
+    .stats { gap:var(--sp-2); }
+    .stat { min-height:92px; padding:var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-4); }
+    .stat-icon, .stat-sub { display:none; }
+    .stat .label { font-size:var(--fs-xs); }
+    .stat .value { font-size:var(--fs-lg); }
     .chips { flex-wrap:nowrap; overflow-x:auto; padding-bottom:4px; margin:0 calc(var(--sp-3) * -1);
       padding-left:var(--sp-3); padding-right:var(--sp-3); }
     .chip { flex-shrink:0; }
+    th:nth-child(2), td.cell-date { display:none; }
+    th, td { padding-left:var(--sp-4); padding-right:var(--sp-4); }
+    .cell-count { width:150px; }
   }
   @media (prefers-reduced-motion:reduce) {
     *,*::before,*::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
@@ -684,6 +711,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   %%DEMO_BANNER%%
   <div id="stale" class="banner stale" role="alert" hidden>
     This page is more than %%STALE_HOURS%% hours old. The daily update may have failed &ndash; check the GitHub Action before sending anything.
+    <button type="button" onclick="this.parentElement.hidden=true" aria-label="Dismiss">%%ICON_CLOSE%%</button>
   </div>
 
   <div class="top">
@@ -699,7 +727,6 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
   <section class="stats" aria-label="Summary">%%STATS%%</section>
   %%SEVBAR%%
-  %%LAPSED%%
 
   <h2>Action queue <span class="count" id="resultCount" aria-live="polite">%%GROUP_COUNT%%</span></h2>
 
@@ -709,6 +736,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         <span class="search-icon">%%ICON_SEARCH%%</span>
         <input type="search" id="queueSearch" class="search-input" aria-label="Search owner, property or tenant"
                placeholder="Search owner, property or tenant" autocomplete="off" spellcheck="false">
+        <button type="button" id="searchClear" class="search-clear" aria-label="Clear search" hidden>%%ICON_CLOSE%%</button>
         <span class="search-kbd"><kbd>/</kbd></span>
       </div>
       <div class="chips" id="filterChips" role="group" aria-label="Filter by status">%%CHIPS%%</div>
@@ -723,15 +751,12 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   <h2>Upcoming renewals <span class="count">next %%UPCOMING_WINDOW%% days</span></h2>
   <div class="table-wrap">
     <table>
-      <thead><tr><th scope="col">Property</th><th scope="col">Owner</th><th scope="col">Ends</th><th scope="col">Days left</th></tr></thead>
+      <thead><tr><th scope="col">Property</th><th scope="col">Ends</th><th scope="col">Time until renewal</th></tr></thead>
       <tbody>%%UPCOMING%%</tbody>
     </table>
   </div>
 
-  <footer>
-    Send opens a pre-filled WhatsApp message from your own number. Nothing sends automatically.<br>
-    &ldquo;Sent&rdquo; marks are saved in this browser only. Agreements more than 15 days overdue leave the queue; call those owners directly.
-  </footer>
+  <footer>Send opens a pre-filled WhatsApp message from your own number. Nothing sends automatically.</footer>
 </main>
 
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -755,14 +780,14 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     var t0 = null;
     function tick(ts) {
       if (t0 === null) t0 = ts;
-      var p = Math.min((ts - t0) / 600, 1);
+      var p = Math.min((ts - t0) / 650, 1);
       el.textContent = Math.round((1 - Math.pow(1 - p, 3)) * target);
       if (p < 1) requestAnimationFrame(tick); else el.textContent = target;
     }
     requestAnimationFrame(tick);
   });
 
-  /* Cursor spotlight (desktop only) */
+  /* Cursor spotlight (desktop pointer only) */
   if (fine && !reduce) {
     $$('.owner-card').forEach(function (card) {
       card.addEventListener('mousemove', function (e) {
@@ -773,49 +798,18 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     });
   }
 
-  /* Sent tracking (per browser) */
-  var STORE = 'rr:sent:v1', sent = {};
-  try { sent = JSON.parse(localStorage.getItem(STORE) || '{}') || {}; } catch (e) { sent = {}; }
-  var cutoff = Date.now() - 120 * 864e5;
-  Object.keys(sent).forEach(function (k) { if (new Date(sent[k]).getTime() < cutoff) delete sent[k]; });
-  function save() { try { localStorage.setItem(STORE, JSON.stringify(sent)); } catch (e) {} }
-
-  var rows = $$('.property-row'), cards = $$('.owner-card');
-  var kpiSent = $('#kpiSent'), unsentN = $('#unsentN');
-  var filt = 'all', inp = $('#queueSearch'), empty = $('#queueEmpty'), countEl = $('#resultCount');
-  var groupText = countEl ? countEl.textContent : '';
-
-  function isSent(row) { return !!sent[row.getAttribute('data-key')]; }
-  function paint(row) {
-    var on = isSent(row);
-    row.classList.toggle('is-sent', on);
-    var m = $('.mark-btn', row);
-    m.setAttribute('aria-pressed', on ? 'true' : 'false');
-    m.setAttribute('aria-label', on ? 'Mark as not sent' : 'Mark as sent');
-    m.title = on ? 'Marked sent \u2013 tap to undo' : 'Mark as sent';
-    var l = $('.send-label', row);
-    if (l) l.textContent = on ? 'Send again' : 'Send WhatsApp';
-  }
-  function updateCounts() {
-    var n = rows.filter(isSent).length;
-    if (kpiSent) kpiSent.textContent = n + ' / ' + rows.length;
-    if (unsentN) unsentN.textContent = rows.length - n;
-  }
-  function setSent(row, on) {
-    if (on) sent[row.getAttribute('data-key')] = new Date().toISOString();
-    else delete sent[row.getAttribute('data-key')];
-    save(); paint(row); updateCounts();
-  }
-
   /* Search + filter (row level, so mixed-severity owners behave) */
+  var rows = $$('.property-row'), cards = $$('.owner-card');
+  var inp = $('#queueSearch'), clearBtn = $('#searchClear'), empty = $('#queueEmpty');
+  var countEl = $('#resultCount'), groupText = countEl ? countEl.textContent : '', filt = 'all';
+
   function run() {
     var q = (inp.value || '').trim().toLowerCase(), shown = 0;
     rows.forEach(function (row) {
       var okQ = !q || (row.getAttribute('data-search') || '').indexOf(q) !== -1;
-      var okF = filt === 'all' || (filt === 'unsent' ? !isSent(row) : row.getAttribute('data-sev') === filt);
-      var vis = okQ && okF;
-      row.hidden = !vis;
-      if (vis) shown++;
+      var okF = filt === 'all' || row.getAttribute('data-sev') === filt;
+      row.hidden = !(okQ && okF);
+      if (okQ && okF) shown++;
     });
     cards.forEach(function (card) {
       card.hidden = $$('.property-row:not([hidden])', card).length === 0;
@@ -824,10 +818,10 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     if (countEl && rows.length) {
       countEl.textContent = (shown === rows.length) ? groupText : shown + ' of ' + rows.length + ' properties';
     }
+    if (clearBtn) clearBtn.hidden = !inp.value;
   }
-
-  rows.forEach(paint); updateCounts(); run();
   inp.addEventListener('input', run);
+  if (clearBtn) clearBtn.addEventListener('click', function () { inp.value = ''; run(); inp.focus(); });
   $$('#filterChips .chip').forEach(function (chip) {
     chip.addEventListener('click', function () {
       $$('#filterChips .chip').forEach(function (c) { c.setAttribute('aria-pressed', 'false'); });
@@ -836,12 +830,16 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
       run();
     });
   });
+  run();
 
-  /* Toast + clipboard */
+  /* Toast + copy message */
   var toastEl = $('#toast'), toastT;
-  function toast(msg) {
-    toastEl.textContent = msg; toastEl.classList.add('show');
-    clearTimeout(toastT); toastT = setTimeout(function () { toastEl.classList.remove('show'); }, 1800);
+  function toast(msg, type) {
+    toastEl.textContent = msg;
+    toastEl.className = 'toast' + (type ? ' ' + type : '');
+    toastEl.classList.add('show');
+    clearTimeout(toastT);
+    toastT = setTimeout(function () { toastEl.classList.remove('show'); }, 2000);
   }
   function copyText(t) {
     if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(t);
@@ -853,21 +851,13 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
       document.body.removeChild(ta);
     });
   }
-
   document.addEventListener('click', function (e) {
-    var row = e.target.closest ? e.target.closest('.property-row') : null;
-    if (!row) return;
-    if (e.target.closest('.send-btn:not(.disabled)')) {
-      setSent(row, true);
-      if (filt === 'unsent') setTimeout(run, 700);
-    } else if (e.target.closest('.mark-btn')) {
-      setSent(row, !isSent(row));
-      if (filt === 'unsent') setTimeout(run, 300);
-    } else if (e.target.closest('.copy-btn')) {
-      copyText(row.getAttribute('data-msg') || '').then(
-        function () { toast('Message copied'); },
-        function () { toast('Copy failed \u2013 select the text manually'); });
-    }
+    var btn = e.target.closest ? e.target.closest('.copy-btn') : null;
+    if (!btn) return;
+    var row = btn.closest('.property-row');
+    copyText(row.getAttribute('data-msg') || '').then(
+      function () { toast('Message copied', 'success'); },
+      function () { toast('Copy failed \u2013 select the text manually', 'error'); });
   });
 
   /* Keyboard: "/" focuses search, Esc clears it */
@@ -883,13 +873,13 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
 
 def fill(template: str, **tokens) -> str:
-    out = template
-    for k, v in tokens.items():
-        out = out.replace(f"%%{k}%%", str(v))
-    leftover = re.findall(r"%%[A-Z_]+%%", out)
-    if leftover:
-        raise RuntimeError(f"Unfilled template tokens: {sorted(set(leftover))}")
-    return out
+    """Single pass, so inserted data can never be re-scanned for tokens."""
+    def repl(m):
+        try:
+            return str(tokens[m.group(1)])
+        except KeyError:
+            raise RuntimeError(f"Unfilled template token: %%{m.group(1)}%%") from None
+    return re.sub(r"%%([A-Z_]+)%%", repl, template)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -901,9 +891,6 @@ def build_dashboard(agreements: "list[Agreement]", now: datetime, demo: bool) ->
     upcoming = sorted((a for a in agreements
                        if ACTIVE_WINDOW_MAX_DAYS < a.days_left <= UPCOMING_WINDOW_DAYS),
                       key=lambda a: a.days_left)
-    lapsed = [a for a in agreements
-              if -LAPSED_LOOKBACK_DAYS <= a.days_left < ACTIVE_WINDOW_MIN_DAYS]
-    tracked = len([a for a in agreements if a.days_left >= -LAPSED_LOOKBACK_DAYS])
 
     tier_counts = {t: 0 for t in TIER_ORDER}
     for a in active:
@@ -917,31 +904,27 @@ def build_dashboard(agreements: "list[Agreement]", now: datetime, demo: bool) ->
     ordered = sorted(groups.values(),
                      key=lambda rows: -max(severity(r.days_left) for r in rows))
     cards_html = "".join(render_card(rows[0].owner, rows, i) for i, rows in enumerate(ordered))
-    if not cards_html:
+    if cards_html:
+        cards_html = f'<div class="owner-grid">{cards_html}</div>'
+    else:
         cards_html = ('<div class="empty"><strong>All clear</strong>'
                       'Nothing needs a reminder right now.</div>')
 
     stats = "".join([
-        render_kpi(ICON_BOLT, "Needs action",
-                   f'<div class="value" data-countup="{len(active)}">0</div>',
-                   "In the action window", "warn" if active else "ok"),
-        render_kpi(ICON_ALERT, "Urgent",
-                   f'<div class="value" data-countup="{urgent}">0</div>',
-                   "Overdue or expiring today", "crit" if urgent else "ok"),
-        render_kpi(ICON_SENT, "Sent",
-                   f'<div class="value" id="kpiSent">0 / {len(active)}</div>',
-                   "Marked on this device"),
-        render_kpi(ICON_CAL, "Coming up",
-                   f'<div class="value" data-countup="{len(upcoming)}">0</div>',
-                   f"Next {UPCOMING_WINDOW_DAYS} days"),
+        render_kpi(ICON_BOLT, "Needs action", len(active), "In the action window",
+                   "warn" if active else "ok"),
+        render_kpi(ICON_ALERT, "Urgent", urgent, "Overdue or expiring today",
+                   "crit" if urgent else "ok"),
+        render_kpi(ICON_CAL, "Coming up", len(upcoming), f"Next {UPCOMING_WINDOW_DAYS} days"),
     ])
 
     sevbar = ""
     if active:
-        segs = "".join(f'<span class="{t}" style="flex:{tier_counts[t]}" '
+        segs = "".join(f'<span class="{t}" style="flex-grow:{tier_counts[t]}" '
                        f'title="{TIER_NAMES[t]}: {tier_counts[t]}"></span>'
                        for t in TIER_ORDER if tier_counts[t])
-        summary = ", ".join(f"{tier_counts[t]} {TIER_NAMES[t].lower()}" for t in TIER_ORDER if tier_counts[t])
+        summary = ", ".join(f"{tier_counts[t]} {TIER_NAMES[t].lower()}"
+                            for t in TIER_ORDER if tier_counts[t])
         sevbar = f'<div class="sevbar" role="img" aria-label="Queue by urgency: {summary}">{segs}</div>'
 
     chips = [f'<button type="button" class="chip" data-filter="all" aria-pressed="true">All '
@@ -949,23 +932,14 @@ def build_dashboard(agreements: "list[Agreement]", now: datetime, demo: bool) ->
     for t in TIER_ORDER:
         chips.append(f'<button type="button" class="chip" data-filter="{t}" aria-pressed="false">'
                      f'{TIER_NAMES[t]} <span class="n">{tier_counts[t]}</span></button>')
-    chips.append(f'<button type="button" class="chip" data-filter="unsent" aria-pressed="false">'
-                 f'Unsent <span class="n" id="unsentN">{len(active)}</span></button>')
-
-    lapsed_html = ""
-    if lapsed:
-        n = len(lapsed)
-        lapsed_html = (f'<div class="banner warn" role="note">{n} agreement{"s" if n != 1 else ""} '
-                       f'lapsed in the last {LAPSED_LOOKBACK_DAYS} days and left the queue. '
-                       f'Call {"those owners" if n != 1 else "that owner"} directly.</div>')
 
     if upcoming:
         up_rows = "".join(render_upcoming_row(a) for a in upcoming[:UPCOMING_PREVIEW_LIMIT])
         if len(upcoming) > UPCOMING_PREVIEW_LIMIT:
-            up_rows += (f'<tr><td colspan="4" class="muted">+ {len(upcoming) - UPCOMING_PREVIEW_LIMIT} '
+            up_rows += (f'<tr><td colspan="3" class="grid-note">+ {len(upcoming) - UPCOMING_PREVIEW_LIMIT} '
                         f'more in the next {UPCOMING_WINDOW_DAYS} days (see the sheet)</td></tr>')
     else:
-        up_rows = (f'<tr><td colspan="4" class="muted">No renewals in the next '
+        up_rows = (f'<tr><td colspan="3" class="grid-note">No renewals in the next '
                    f'{UPCOMING_WINDOW_DAYS} days.</td></tr>')
 
     n_owners = len(ordered)
@@ -980,22 +954,21 @@ def build_dashboard(agreements: "list[Agreement]", now: datetime, demo: bool) ->
         GENERATED_DATE=now.strftime("%d %b %Y"),
         GENERATED_ISO=now.isoformat(timespec="seconds"),
         SYNC=esc(now.strftime("%d %b, %I:%M %p IST")),
-        TRACKED=f"{tracked} agreement{'s' if tracked != 1 else ''} tracked",
-        STATS=stats, SEVBAR=sevbar, LAPSED=lapsed_html, CHIPS="".join(chips),
+        TRACKED=f"{len(agreements)} agreement{'s' if len(agreements) != 1 else ''} tracked",
+        STATS=stats, SEVBAR=sevbar, CHIPS="".join(chips),
         GROUP_COUNT=group_count, CARDS=cards_html, UPCOMING=up_rows,
         UPCOMING_WINDOW=UPCOMING_WINDOW_DAYS, STALE_HOURS=STALE_AFTER_HOURS,
-        DEMO_BANNER=demo_banner, ICON_SEARCH=ICON_SEARCH,
+        DEMO_BANNER=demo_banner, ICON_SEARCH=ICON_SEARCH, ICON_CLOSE=ICON_CLOSE,
     )
-    stats_out = dict(active=len(active), owners=n_owners, upcoming=len(upcoming),
-                     lapsed=len(lapsed), tracked=tracked)
-    return page, stats_out
+    return page, dict(active=len(active), owners=n_owners, upcoming=len(upcoming),
+                      total=len(agreements))
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Generate the rental renewal dashboard.")
     ap.add_argument("--demo", action="store_true", help="use built-in sample data (no Sheets access)")
     ap.add_argument("--empty", action="store_true", help="with --demo: preview the empty state")
-    ap.add_argument("--out", help="output file path")
+    ap.add_argument("--out", help="output file path (default: docs/index.html, or demo.html)")
     args = ap.parse_args()
 
     now = datetime.now(IST)
@@ -1027,7 +1000,7 @@ def main() -> None:
         f.write(page)
 
     summary = (f"active={s['active']} owners={s['owners']} upcoming={s['upcoming']} "
-               f"lapsed={s['lapsed']} tracked={s['tracked']}")
+               f"total={s['total']}")
     print(f"Dashboard written to {out_path}: {summary}")
 
     if log_ws is not None:
