@@ -408,7 +408,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <meta name="robots" content="noindex, nofollow">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#05070c">
-<title>Renewal reminders &ndash; %%GENERATED_DATE%%</title>
+<title>Renewal Reminders &ndash; %%GENERATED_DATE%%</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
