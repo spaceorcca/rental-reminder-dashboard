@@ -115,7 +115,8 @@ def parse_date(raw) -> "date | None":
 
 def normalize_phone(raw) -> "str | None":
     """Return e.g. '919876543210', or None if it isn't a valid Indian number."""
-    digits = "".join(c for c in str(raw) if c.isdigit())
+    cleaned = str(raw).split(".")[0].strip()
+    digits = "".join(c for c in cleaned if c.isdigit())
     if len(digits) == 10:
         return "91" + digits
     if len(digits) == 11 and digits.startswith("0"):
@@ -130,10 +131,10 @@ def classify_badge(days_left: int) -> "tuple[str, str]":
     if days_left < 0:
         return "overdue", f"Overdue ({abs(days_left)}d)"
     if days_left == 0:
-        return "today", "Expires today"
+        return "today", "Expires Today"
     if days_left <= 14:
-        return "soon", "Expiring soon"
-    return "window30", "30-day window"
+        return "soon", "Expiring Soon"
+    return "window30", "30-Day Window"
 
 
 def severity(days_left: int) -> int:
@@ -313,7 +314,12 @@ ICON_WA = ('<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" 
            '00-3.48-8.413Z"/></svg>')
 
 TIER_ORDER = ("overdue", "today", "soon", "window30")
-TIER_NAMES = {"overdue": "Overdue", "today": "Today", "soon": "Expiring soon", "window30": "30-day"}
+TIER_NAMES = {
+    "overdue": "Overdue",
+    "today": "Today",
+    "soon": "Expiring Soon",
+    "window30": "30-Day",
+}
 
 
 def owner_initial(owner: str) -> str:
@@ -327,21 +333,21 @@ def render_row(a: Agreement) -> str:
     tier, label = classify_badge(a.days_left)
     end_disp = a.end_date.strftime("%d %b %Y")
     message = build_message(a.owner, a.flat, a.tenant, end_disp, a.days_left)
-    owner_disp = a.owner or "Unnamed owner"
+    owner_disp = a.owner or "Unnamed Owner"
 
     if a.days_left == 0:
         days_txt, days_sub = "Today", ""
     elif a.days_left < 0:
-        days_txt, days_sub = f"{abs(a.days_left)}d", "overdue"
+        days_txt, days_sub = f"{abs(a.days_left)}d", "Overdue"
     else:
-        days_txt, days_sub = f"{a.days_left}d", "left"
+        days_txt, days_sub = f"{a.days_left}d", "Left"
 
     if a.phone:
         action = (f'<a class="send-btn" href="{esc(wa_link(a.phone, message))}" target="_blank" '
                   f'rel="noopener noreferrer">{ICON_WA}Send WhatsApp</a>')
     else:
         action = ('<span class="send-btn disabled" role="note">'
-                  'No valid number \u2013 fix in sheet</span>')
+                  'No Valid Number \u2013 Fix in Sheet</span>')
 
     tenant_line = f'<div class="tenant">Tenant: {esc(a.tenant)}</div>' if a.tenant else ""
     blob = f"{owner_disp} {a.flat} {a.tenant}".lower()
@@ -349,14 +355,14 @@ def render_row(a: Agreement) -> str:
     return (
         f'<div class="property-row" data-sev="{tier}" data-search="{esc(blob)}" data-msg="{esc(message)}">'
         f'<div class="row-top">'
-        f'<div class="row-main"><div class="flat-name">{esc(a.flat) or "No address"}</div>{tenant_line}</div>'
+        f'<div class="row-main"><div class="flat-name">{esc(a.flat) or "No Address"}</div>{tenant_line}</div>'
         f'<div class="days"><span class="days-num">{days_txt}</span>'
         f'{f"<small>{days_sub}</small>" if days_sub else ""}</div></div>'
         f'<div class="row-meta"><span class="pill {tier}">{esc(label)}</span>'
         f'<span class="end-date">Ends {end_disp}</span></div>'
         f'<div class="row-actions">'
-        f'<button type="button" class="icon-btn copy-btn" aria-label="Copy message" '
-        f'title="Copy WhatsApp message">{ICON_COPY}</button>{action}</div></div>'
+        f'<button type="button" class="icon-btn copy-btn" aria-label="Copy Message" '
+        f'title="Copy WhatsApp Message">{ICON_COPY}</button>{action}</div></div>'
     )
 
 
@@ -364,13 +370,13 @@ def render_card(owner: str, rows: "list[Agreement]", idx: int) -> str:
     rows = sorted(rows, key=lambda a: -severity(a.days_left))
     worst = classify_badge(rows[0].days_left)[0]
     n = len(rows)
-    owner_disp = owner or "Unnamed owner"
+    owner_disp = owner or "Unnamed Owner"
     return (
         f'<article class="owner-card" data-worst="{worst}" style="--i:{min(idx, 12)}">'
         f'<header class="owner-head"><div class="owner-avatar" aria-hidden="true">'
         f'{esc(owner_initial(owner))}</div>'
         f'<h3 class="owner-name">{esc(owner_disp)}</h3>'
-        f'<span class="owner-count">{n} {"property" if n == 1 else "properties"}</span></header>'
+        f'<span class="owner-count">{n} {"Property" if n == 1 else "Properties"}</span></header>'
         f'<div class="rows">{"".join(render_row(a) for a in rows)}</div></article>'
     )
 
@@ -380,7 +386,7 @@ def render_upcoming_row(a: Agreement) -> str:
     pct = max(0.0, min(100.0, (UPCOMING_WINDOW_DAYS - a.days_left) / span * 100))
     return (
         f'<tr><td class="cell-main"><div class="cell-flat">{esc(a.flat)}</div>'
-        f'<div class="cell-owner">{esc(a.owner or "Unnamed owner")}</div></td>'
+        f'<div class="cell-owner">{esc(a.owner or "Unnamed Owner")}</div></td>'
         f'<td class="cell-date">{a.end_date.strftime("%d %b %Y")}</td>'
         f'<td class="cell-count"><div class="countdown">'
         f'<div class="meter" aria-hidden="true"><i style="width:{pct:.0f}%"></i></div>'
@@ -407,8 +413,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#05070c">
+<meta name="theme-color" content="#000000">
 <title>Renewal Reminders &ndash; %%GENERATED_DATE%%</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%2322c55e'/%3E%3Cstop offset='100%25' stop-color='%236366f1'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='url(%23g)'/%3E%3Ctext x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' fill='%23fff' font-family='sans-serif' font-weight='700' font-size='28'%3ERR%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -417,12 +424,12 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px; --sp-6:32px; --sp-7:48px;
     --fs-xs:11px; --fs-sm:13px; --fs-md:16px; --fs-lg:22px; --fs-xl:27px;
     --ease:cubic-bezier(0.16,1,0.3,1);
-    --bg:#05070c; --surface:rgba(19,24,38,0.72); --surface-2:rgba(255,255,255,0.03);
+    --bg:#000000; --surface:rgba(13,16,23,0.92); --surface-2:rgba(255,255,255,0.035);
     --border:rgba(255,255,255,0.08); --border-hi:rgba(255,255,255,0.16);
-    --text:#edf0f5; --text-dim:#9aa5b8;
+    --text:#f2f5f9; --text-dim:#94a0b8;
     --accent:#22c55e; --accent-glow:#00f090;
     --primary:#7c9bff; --danger:#ff6b85; --amber:#ffc14d; --critical:#ff5577;
-    --shadow:inset 0 1px 0 rgba(255,255,255,0.06), 0 1px 2px rgba(0,0,0,0.30), 0 8px 24px -8px rgba(0,0,0,0.45);
+    --shadow:inset 0 1px 0 rgba(255,255,255,0.07), 0 2px 4px rgba(0,0,0,0.40), 0 12px 28px -8px rgba(0,0,0,0.65);
     --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
     --sans:'Space Grotesk',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   }
@@ -440,24 +447,24 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     font-size:var(--fs-sm); line-height:1.5; min-height:100vh; min-height:100dvh;
     padding:var(--sp-6) var(--sp-4) var(--sp-7); -webkit-font-smoothing:antialiased;
   }
-  /* Grid + glow live on fixed pseudo-elements (cheaper than background-attachment:fixed) */
+  /* Grid + glow live on fixed pseudo-elements */
   body::before {
     content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
     background-image:
-      linear-gradient(rgba(255,255,255,0.022) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,0.022) 1px, transparent 1px),
-      radial-gradient(ellipse 900px 400px at 50% -10%, rgba(109,139,255,0.10), transparent 60%);
+      linear-gradient(rgba(255,255,255,0.024) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.024) 1px, transparent 1px),
+      radial-gradient(ellipse 900px 420px at 50% -12%, rgba(109,139,255,0.07), transparent 65%);
     background-size:42px 42px, 42px 42px, 100% 100%;
   }
   body::after {
     content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
-    background:radial-gradient(620px 420px at 6% 104%, rgba(34,197,94,0.075), transparent 62%),
-               radial-gradient(520px 400px at 100% 18%, rgba(99,102,241,0.09), transparent 62%);
+    background:radial-gradient(620px 420px at 6% 104%, rgba(34,197,94,0.045), transparent 65%),
+               radial-gradient(520px 400px at 100% 18%, rgba(99,102,241,0.055), transparent 65%);
   }
   .accent-bar { position:fixed; top:0; left:0; right:0; height:2px; z-index:999;
     background:linear-gradient(90deg,#00f5ff 0%,#22c55e 38%,#a855f7 70%,#ff6b85 100%); }
   .grain { position:fixed; inset:0; width:100%; height:100%; z-index:0; pointer-events:none;
-    opacity:0.035; mix-blend-mode:overlay; }
+    opacity:0.03; mix-blend-mode:overlay; }
   @media (max-width:700px) { .grain { display:none; } }
 
   .page { position:relative; z-index:1; max-width:1180px; margin:0 auto; }
@@ -477,57 +484,74 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .top { display:flex; justify-content:space-between; align-items:center; gap:var(--sp-3);
     flex-wrap:wrap; margin-bottom:var(--sp-5); }
   .brand { display:flex; align-items:center; gap:var(--sp-3); min-width:0; }
-  .logo { width:48px; height:48px; border-radius:13px; flex-shrink:0; display:grid; place-items:center;
-    background:linear-gradient(135deg,#22c55e,#6366f1); color:#fff; font-weight:700; font-size:var(--fs-md);
-    letter-spacing:-0.02em; box-shadow:0 0 28px rgba(34,197,94,0.4), 0 0 60px rgba(99,102,241,0.2); }
-  h1 { font-size:var(--fs-lg); font-weight:700; letter-spacing:-0.02em; line-height:1.2; }
+  .logo { width:48px; height:48px; border-radius:14px; flex-shrink:0; display:grid; place-items:center;
+    background:linear-gradient(135deg,#22c55e 0%,#4f46e5 100%); color:#fff; font-weight:700; font-size:var(--fs-md);
+    letter-spacing:-0.03em; border:1px solid rgba(255,255,255,0.22);
+    box-shadow:inset 0 1px 1px rgba(255,255,255,0.45), 0 0 24px rgba(34,197,94,0.32), 0 0 50px rgba(99,102,241,0.18); }
+  h1 { font-size:var(--fs-lg); font-weight:700; letter-spacing:-0.025em; line-height:1.2;
+    background:linear-gradient(180deg,#ffffff 15%,#b8c2d4 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
   .subtitle { font-size:var(--fs-sm); color:var(--text-dim); margin-top:2px; }
+  @keyframes sync-pulse {
+    0% { box-shadow:0 0 0 0 rgba(34,197,94,0.45); }
+    70% { box-shadow:0 0 0 6px rgba(34,197,94,0); }
+    100% { box-shadow:0 0 0 0 rgba(34,197,94,0); }
+  }
   .sync-badge { display:inline-flex; align-items:center; gap:var(--sp-2); font-family:var(--mono);
     font-size:var(--fs-xs); color:var(--accent); background:rgba(34,197,94,0.08);
     border:1px solid rgba(34,197,94,0.28); padding:6px var(--sp-4) 6px var(--sp-3); border-radius:999px; }
-  .sync-dot { width:7px; height:7px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px var(--accent-glow); }
+  .sync-dot { width:7px; height:7px; border-radius:50%; background:var(--accent);
+    box-shadow:0 0 8px var(--accent-glow); animation:sync-pulse 2.2s infinite; }
 
-  /* KPI cards: three evenly spaced columns */
+  /* KPI cards: three evenly spaced columns with crisp inset accent pill (no C-clamp corner curve) */
   .stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--sp-3); margin-bottom:var(--sp-4); }
   .stat { position:relative; overflow:hidden; border-radius:14px; padding:var(--sp-4) var(--sp-4) var(--sp-4) var(--sp-5);
     min-height:112px; display:flex; flex-direction:column; justify-content:flex-end;
-    background:var(--surface); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
-    border:1px solid var(--border); box-shadow:var(--shadow); }
+    background:var(--surface); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+    border:1px solid var(--border); box-shadow:var(--shadow); transition:border-color .2s var(--ease); }
+  .stat:hover { border-color:var(--border-hi); }
+  .stat::before { content:""; position:absolute; left:0; top:16px; bottom:16px; width:3px;
+    border-radius:0 4px 4px 0; background:var(--bar, var(--primary)); opacity:0.95; }
   .stat::after { content:""; position:absolute; inset:0; pointer-events:none;
-    background:radial-gradient(ellipse 90% 70% at 0% 110%, var(--tint, rgba(124,155,255,0.06)), transparent 60%); }
+    background:radial-gradient(circle 180px at 0% 100%, var(--tint, rgba(124,155,255,0.07)), transparent 75%); }
   .stat > * { position:relative; z-index:1; }
-  .stat.warn { --tint:rgba(255,77,109,0.09); border-left:3px solid var(--danger); }
-  .stat.crit { --tint:rgba(255,45,85,0.10); border-left:3px solid var(--critical); }
-  .stat.ok { --tint:rgba(34,197,94,0.08); border-left:3px solid var(--accent); }
-  .stat-icon { position:absolute; top:var(--sp-4); right:var(--sp-4); z-index:1; color:var(--text-dim); opacity:0.7; }
+  .stat.warn { --tint:rgba(255,107,133,0.10); --bar:var(--danger); }
+  .stat.crit { --tint:rgba(255,85,119,0.11); --bar:var(--critical); }
+  .stat.soon { --tint:rgba(255,193,77,0.10); --bar:var(--amber); }
+  .stat.ok   { --tint:rgba(34,197,94,0.09);  --bar:var(--accent); }
+  .stat-icon { position:absolute; top:var(--sp-4); right:var(--sp-4); z-index:1; color:var(--text-dim); opacity:0.65; }
   .stat .label { font-size:var(--fs-sm); color:var(--text-dim); font-weight:500; }
   .stat .value { font-family:var(--mono); font-size:var(--fs-xl); font-weight:600; line-height:1.15;
     letter-spacing:-0.03em; font-variant-numeric:tabular-nums; margin-top:var(--sp-1); }
-  .stat-sub { font-size:var(--fs-xs); color:var(--text-dim); margin-top:2px; }
-  .stat.warn .value { color:var(--danger); text-shadow:0 0 20px rgba(255,77,109,0.50); }
-  .stat.crit .value { color:var(--critical); text-shadow:0 0 20px rgba(255,45,85,0.50); }
-  .stat.ok .value { color:var(--accent); text-shadow:0 0 20px rgba(34,197,94,0.40); }
+  .stat-sub { font-size:var(--fs-xs); color:var(--text-dim); margin-top:3px; }
+  .stat.warn .value { color:var(--danger); text-shadow:0 0 20px rgba(255,107,133,0.45); }
+  .stat.crit .value { color:var(--critical); text-shadow:0 0 20px rgba(255,85,119,0.45); }
+  .stat.soon .value { color:var(--amber); text-shadow:0 0 20px rgba(255,193,77,0.40); }
+  .stat.ok   .value { color:var(--accent); text-shadow:0 0 20px rgba(34,197,94,0.38); }
 
-  /* Urgency bar: the queue's shape at a glance */
-  .sevbar { display:flex; gap:3px; height:6px; margin-bottom:var(--sp-5); }
+  /* Urgency bar: subtle track + proportional segments */
+  .sevbar { display:flex; gap:4px; height:6px; padding:0; margin-bottom:var(--sp-5);
+    border-radius:999px; background:rgba(255,255,255,0.03); }
   .sevbar span { flex-basis:0; min-width:8px; border-radius:999px; animation:sweep .6s var(--ease) both; }
   .sevbar span:nth-child(2) { animation-delay:60ms; } .sevbar span:nth-child(3) { animation-delay:120ms; }
   .sevbar span:nth-child(4) { animation-delay:180ms; }
   @keyframes sweep { from { opacity:0; transform:scaleX(0); transform-origin:left; } }
-  .sevbar .overdue { background:var(--critical); box-shadow:0 0 10px rgba(255,45,85,0.55); }
-  .sevbar .today { background:var(--danger); box-shadow:0 0 10px rgba(255,77,109,0.50); }
-  .sevbar .soon { background:var(--amber); box-shadow:0 0 10px rgba(255,176,32,0.45); }
-  .sevbar .window30 { background:var(--primary); opacity:0.7; }
+  .sevbar .overdue { background:var(--critical); box-shadow:0 0 10px rgba(255,45,85,0.50); }
+  .sevbar .today { background:var(--danger); box-shadow:0 0 10px rgba(255,77,109,0.45); }
+  .sevbar .soon { background:var(--amber); box-shadow:0 0 10px rgba(255,176,32,0.40); }
+  .sevbar .window30 { background:var(--primary); opacity:0.80; }
 
-  /* Section headings */
-  h2 { font-size:var(--fs-md); font-weight:600; letter-spacing:-0.01em; margin:var(--sp-6) 0 var(--sp-3);
-    display:flex; justify-content:space-between; align-items:baseline; gap:var(--sp-3);
-    border-left:3px solid var(--primary); padding-left:10px; }
+  /* Section headings with rounded pill indicator */
+  h2 { position:relative; font-size:var(--fs-md); font-weight:600; letter-spacing:-0.01em;
+    margin:var(--sp-6) 0 var(--sp-3); display:flex; justify-content:space-between;
+    align-items:baseline; gap:var(--sp-3); padding-left:13px; }
+  h2::before { content:""; position:absolute; left:0; top:50%; transform:translateY(-50%);
+    width:3.5px; height:18px; border-radius:999px; background:var(--primary);
+    box-shadow:0 0 10px rgba(124,155,255,0.45); }
   h2 .count { font-size:var(--fs-sm); font-weight:400; color:var(--text-dim); }
 
   /* Toolbar (sticky so search/filters stay reachable while scrolling) */
   .toolbar-wrap { position:sticky; top:0; z-index:30; padding:var(--sp-2) 0 var(--sp-3);
-    background:linear-gradient(180deg,var(--bg) 75%,transparent); }
+    background:linear-gradient(180deg,var(--bg) 78%,transparent); }
   .toolbar { display:flex; gap:var(--sp-3); flex-wrap:wrap; align-items:center; }
   .search-wrap { flex:1 1 240px; position:relative; }
   input[type="search"]::-webkit-search-cancel-button,
@@ -564,7 +588,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .owner-grid { display:grid; gap:var(--sp-3); align-items:start;
     grid-template-columns:repeat(auto-fill,minmax(min(100%,420px),1fr)); }
   .owner-card { position:relative; overflow:hidden; border-radius:16px; padding:var(--sp-4);
-    background:var(--surface); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+    background:var(--surface); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
     border:1px solid var(--border); box-shadow:var(--shadow);
     animation:card-in .45s var(--ease) both; animation-delay:calc(var(--i,0) * 60ms); }
   @keyframes card-in { from { opacity:0; transform:translateY(12px) scale(0.98); } }
@@ -582,7 +606,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   }
   .owner-head { display:flex; align-items:center; gap:var(--sp-3); margin-bottom:var(--sp-3); }
   .owner-avatar { width:34px; height:34px; min-width:34px; border-radius:50%; display:grid; place-items:center;
-    background:linear-gradient(135deg,#6366f1,#22c55e); color:#fff; font-weight:700; font-size:var(--fs-sm); }
+    background:linear-gradient(135deg,#6366f1,#22c55e); color:#fff; font-weight:700; font-size:var(--fs-sm);
+    box-shadow:inset 0 1px 1px rgba(255,255,255,0.35); }
   .owner-card[data-worst="overdue"] .owner-avatar { background:linear-gradient(135deg,#ff5577,#c91c45); }
   .owner-card[data-worst="today"] .owner-avatar { background:linear-gradient(135deg,#ff6b85,#d63063); }
   .owner-card[data-worst="soon"] .owner-avatar { background:linear-gradient(135deg,#ffc14d,#c87900); color:#2b1a00; }
@@ -639,19 +664,20 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
       box-shadow:0 6px 22px rgba(34,197,94,0.40); }
   }
 
-  /* Upcoming renewals: data grid */
+  /* Upcoming Renewals: data grid */
   .table-wrap { border-radius:16px; overflow-x:auto; background:var(--surface);
-    backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+    backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
     border:1px solid var(--border); box-shadow:var(--shadow); }
   table { width:100%; border-collapse:collapse; }
-  th { text-align:left; font-size:var(--fs-xs); font-weight:500; color:var(--text-dim);
+  th { text-align:left; font-size:var(--fs-xs); font-weight:600; color:var(--text-dim);
+    text-transform:uppercase; letter-spacing:0.05em;
     padding:var(--sp-3) var(--sp-5); border-bottom:1px solid var(--border); background:rgba(255,255,255,0.02); }
   th:last-child { text-align:right; }
   td { padding:14px var(--sp-5); vertical-align:middle; border-bottom:1px solid rgba(255,255,255,0.05); }
   tbody tr:last-child td { border-bottom:none; }
   tbody tr { transition:background .15s var(--ease); }
-  tbody tr:hover { background:rgba(124,155,255,0.05); }
-  tbody tr:hover td:first-child { box-shadow:inset 3px 0 0 var(--primary); }
+  tbody tr:hover { background:rgba(34,197,94,0.04); }
+  tbody tr:hover td:first-child { box-shadow:inset 3px 0 0 var(--accent); }
   .cell-flat { font-size:var(--fs-sm); font-weight:600; line-height:1.4; }
   .cell-owner { font-size:var(--fs-xs); color:var(--text-dim); margin-top:2px; }
   .cell-date { font-family:var(--mono); font-size:var(--fs-xs); color:var(--text-dim); white-space:nowrap; }
@@ -718,7 +744,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     <div class="brand">
       <div class="logo" aria-hidden="true">RR</div>
       <div>
-        <h1>Renewal reminders</h1>
+        <h1>Renewal Reminders</h1>
         <div class="subtitle">%%GENERATED_DATE%% &middot; %%TRACKED%%</div>
       </div>
     </div>
@@ -728,30 +754,30 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   <section class="stats" aria-label="Summary">%%STATS%%</section>
   %%SEVBAR%%
 
-  <h2>Action queue <span class="count" id="resultCount" aria-live="polite">%%GROUP_COUNT%%</span></h2>
+  <h2>Action Queue <span class="count" id="resultCount" aria-live="polite">%%GROUP_COUNT%%</span></h2>
 
   <div class="toolbar-wrap">
     <div class="toolbar">
       <div class="search-wrap">
         <span class="search-icon">%%ICON_SEARCH%%</span>
-        <input type="search" id="queueSearch" class="search-input" aria-label="Search owner, property or tenant"
-               placeholder="Search owner, property or tenant" autocomplete="off" spellcheck="false">
-        <button type="button" id="searchClear" class="search-clear" aria-label="Clear search" hidden>%%ICON_CLOSE%%</button>
+        <input type="search" id="queueSearch" class="search-input" aria-label="Search Owner, Property or Tenant"
+               placeholder="Search Owner, Property or Tenant" autocomplete="off" spellcheck="false">
+        <button type="button" id="searchClear" class="search-clear" aria-label="Clear Search" hidden>%%ICON_CLOSE%%</button>
         <span class="search-kbd"><kbd>/</kbd></span>
       </div>
-      <div class="chips" id="filterChips" role="group" aria-label="Filter by status">%%CHIPS%%</div>
+      <div class="chips" id="filterChips" role="group" aria-label="Filter by Status">%%CHIPS%%</div>
     </div>
   </div>
 
   <div id="queueEmpty" class="empty" role="status" hidden>
-    <strong>No matches</strong>Try a different search or clear the filter.
+    <strong>No Matches</strong>Try a different search or clear the filter.
   </div>
   <div id="cards">%%CARDS%%</div>
 
-  <h2>Upcoming renewals <span class="count">next %%UPCOMING_WINDOW%% days</span></h2>
+  <h2>Upcoming Renewals <span class="count">Next %%UPCOMING_WINDOW%% Days</span></h2>
   <div class="table-wrap">
     <table>
-      <thead><tr><th scope="col">Property</th><th scope="col">Ends</th><th scope="col">Time until renewal</th></tr></thead>
+      <thead><tr><th scope="col">Property</th><th scope="col">Ends</th><th scope="col">Time Until Renewal</th></tr></thead>
       <tbody>%%UPCOMING%%</tbody>
     </table>
   </div>
@@ -816,7 +842,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     });
     empty.hidden = !(rows.length > 0 && shown === 0);
     if (countEl && rows.length) {
-      countEl.textContent = (shown === rows.length) ? groupText : shown + ' of ' + rows.length + ' properties';
+      countEl.textContent = (shown === rows.length) ? groupText : shown + ' of ' + rows.length + ' Properties';
     }
     if (clearBtn) clearBtn.hidden = !inp.value;
   }
@@ -856,8 +882,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     if (!btn) return;
     var row = btn.closest('.property-row');
     copyText(row.getAttribute('data-msg') || '').then(
-      function () { toast('Message copied', 'success'); },
-      function () { toast('Copy failed \u2013 select the text manually', 'error'); });
+      function () { toast('Message Copied', 'success'); },
+      function () { toast('Copy Failed \u2013 Select Text Manually', 'error'); });
   });
 
   /* Keyboard: "/" focuses search, Esc clears it */
@@ -907,15 +933,24 @@ def build_dashboard(agreements: "list[Agreement]", now: datetime, demo: bool) ->
     if cards_html:
         cards_html = f'<div class="owner-grid">{cards_html}</div>'
     else:
-        cards_html = ('<div class="empty"><strong>All clear</strong>'
+        cards_html = ('<div class="empty"><strong>All Clear</strong>'
                       'Nothing needs a reminder right now.</div>')
 
+    # Match "Needs Action" color to the actual highest urgency in the queue
+    if urgent:
+        action_cls = "warn"
+    elif tier_counts["soon"]:
+        action_cls = "soon"
+    elif active:
+        action_cls = ""
+    else:
+        action_cls = "ok"
+
     stats = "".join([
-        render_kpi(ICON_BOLT, "Needs action", len(active), "In the action window",
-                   "warn" if active else "ok"),
-        render_kpi(ICON_ALERT, "Urgent", urgent, "Overdue or expiring today",
+        render_kpi(ICON_BOLT, "Needs Action", len(active), "In the Action Window", action_cls),
+        render_kpi(ICON_ALERT, "Urgent", urgent, "Overdue or Expiring Today",
                    "crit" if urgent else "ok"),
-        render_kpi(ICON_CAL, "Coming up", len(upcoming), f"Next {UPCOMING_WINDOW_DAYS} days"),
+        render_kpi(ICON_CAL, "Coming Up", len(upcoming), f"Next {UPCOMING_WINDOW_DAYS} Days"),
     ])
 
     sevbar = ""
@@ -923,9 +958,9 @@ def build_dashboard(agreements: "list[Agreement]", now: datetime, demo: bool) ->
         segs = "".join(f'<span class="{t}" style="flex-grow:{tier_counts[t]}" '
                        f'title="{TIER_NAMES[t]}: {tier_counts[t]}"></span>'
                        for t in TIER_ORDER if tier_counts[t])
-        summary = ", ".join(f"{tier_counts[t]} {TIER_NAMES[t].lower()}"
+        summary = ", ".join(f"{tier_counts[t]} {TIER_NAMES[t]}"
                             for t in TIER_ORDER if tier_counts[t])
-        sevbar = f'<div class="sevbar" role="img" aria-label="Queue by urgency: {summary}">{segs}</div>'
+        sevbar = f'<div class="sevbar" role="img" aria-label="Queue by Urgency: {summary}">{segs}</div>'
 
     chips = [f'<button type="button" class="chip" data-filter="all" aria-pressed="true">All '
              f'<span class="n">{len(active)}</span></button>']
@@ -937,16 +972,16 @@ def build_dashboard(agreements: "list[Agreement]", now: datetime, demo: bool) ->
         up_rows = "".join(render_upcoming_row(a) for a in upcoming[:UPCOMING_PREVIEW_LIMIT])
         if len(upcoming) > UPCOMING_PREVIEW_LIMIT:
             up_rows += (f'<tr><td colspan="3" class="grid-note">+ {len(upcoming) - UPCOMING_PREVIEW_LIMIT} '
-                        f'more in the next {UPCOMING_WINDOW_DAYS} days (see the sheet)</td></tr>')
+                        f'More in the Next {UPCOMING_WINDOW_DAYS} Days (See the Sheet)</td></tr>')
     else:
-        up_rows = (f'<tr><td colspan="3" class="grid-note">No renewals in the next '
-                   f'{UPCOMING_WINDOW_DAYS} days.</td></tr>')
+        up_rows = (f'<tr><td colspan="3" class="grid-note">No Renewals in the Next '
+                   f'{UPCOMING_WINDOW_DAYS} Days.</td></tr>')
 
     n_owners = len(ordered)
-    group_count = (f"{n_owners} owner{'s' if n_owners != 1 else ''}, "
-                   f"{len(active)} propert{'y' if len(active) == 1 else 'ies'}") if active else ""
+    group_count = (f"{n_owners} Owner{'s' if n_owners != 1 else ''}, "
+                   f"{len(active)} Propert{'y' if len(active) == 1 else 'ies'}") if active else ""
 
-    demo_banner = ('<div class="banner demo" role="note">Demo data. These are sample agreements, '
+    demo_banner = ('<div class="banner demo" role="note">Demo Data. These are sample agreements, '
                    'not real ones.</div>') if demo else ""
 
     page = fill(
@@ -954,7 +989,7 @@ def build_dashboard(agreements: "list[Agreement]", now: datetime, demo: bool) ->
         GENERATED_DATE=now.strftime("%d %b %Y"),
         GENERATED_ISO=now.isoformat(timespec="seconds"),
         SYNC=esc(now.strftime("%d %b, %I:%M %p IST")),
-        TRACKED=f"{len(agreements)} agreement{'s' if len(agreements) != 1 else ''} tracked",
+        TRACKED=f"{len(agreements)} Agreement{'s' if len(agreements) != 1 else ''} Tracked",
         STATS=stats, SEVBAR=sevbar, CHIPS="".join(chips),
         GROUP_COUNT=group_count, CARDS=cards_html, UPCOMING=up_rows,
         UPCOMING_WINDOW=UPCOMING_WINDOW_DAYS, STALE_HOURS=STALE_AFTER_HOURS,
